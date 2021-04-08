@@ -1,3 +1,14 @@
+# Lantern Shadowsocks
+
+This is a fork of https://github.com/Jigsaw-Code/outline-ss-server
+modified for lantern purposes.
+
+To fetch changes from jigsaw, add it as a remote and rebase/take changes.
+```
+git remote add upstream git@github.com:Jigsaw-Code/outline-ss-server.git
+git remote set-url --push upstream DISABLE
+```
+
 # Outline ss-server
 [![Build Status](https://travis-ci.org/Jigsaw-Code/outline-ss-server.svg?branch=master)](https://travis-ci.org/Jigsaw-Code/outline-ss-server)
 

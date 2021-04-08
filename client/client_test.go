@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	onet "github.com/Jigsaw-Code/outline-ss-server/net"
-	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
+	onet "github.com/getlantern/lantern-shadowsocks/net"
+	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
 	"github.com/shadowsocks/go-shadowsocks2/socks"
 )
 

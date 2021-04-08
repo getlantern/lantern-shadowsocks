@@ -28,9 +28,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Jigsaw-Code/outline-ss-server/service"
-	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
-	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
+	"github.com/getlantern/lantern-shadowsocks/service"
+	"github.com/getlantern/lantern-shadowsocks/service/metrics"
+	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
 	"github.com/op/go-logging"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/prometheus/client_golang/prometheus"

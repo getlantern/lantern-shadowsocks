@@ -18,7 +18,7 @@ import (
 	"container/list"
 	"fmt"
 
-	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
+	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
 )
 
 // MakeTestCiphers creates a CipherList containing one fresh AEAD cipher

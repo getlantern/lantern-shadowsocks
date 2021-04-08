@@ -1,4 +1,4 @@
-module github.com/Jigsaw-Code/outline-ss-server
+module github.com/getlantern/lantern-shadowsocks
 
 require (
 	github.com/golang/protobuf v1.4.3 // indirect
