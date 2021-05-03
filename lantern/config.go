@@ -38,7 +38,7 @@ func UpdateCipherList(cipherList service.CipherList, configs []CipherConfig) err
 		}
 		ci, err := ss.NewCipher(cipher, config.Secret)
 		if err != nil {
-			return fmt.Errorf("Failed to create cipher entry (%v, %v, %v) : %v", config.ID, config.Cipher, config.Secret, err)
+			return fmt.Errorf("Failed to create cipher entry (%v, %v, %v) : %w", config.ID, config.Cipher, config.Secret, err)
 		}
 		entry := service.MakeCipherEntry(config.ID, ci, config.Secret)
 		list.PushBack(&entry)

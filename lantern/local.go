@@ -17,6 +17,7 @@ import (
 
 var (
 	ErrListenerClosed = errors.New("listener closed")
+	defaultMaxPending = 1000
 
 	defaultMetrics  metrics.ShadowsocksMetrics
 	initMetricsOnce sync.Once
@@ -46,13 +47,14 @@ func maybeLocalDialer(isLocal HandleLocalPredicate, handleLocal service.TargetDi
 }
 
 type ListenerOptions struct {
-	Listener            *net.TCPListener
-	Ciphers             service.CipherList
-	ReplayCache         *service.ReplayCache
-	Metrics             metrics.ShadowsocksMetrics
-	Timeout             time.Duration
-	ShouldHandleLocally HandleLocalPredicate   // determines whether an upstream should be handled by the listener locally or dial upstream
-	TargetIPValidator   onet.TargetIPValidator // determines validity of non-local upstream dials
+	Listener              *net.TCPListener
+	Ciphers               service.CipherList
+	ReplayCache           *service.ReplayCache
+	Metrics               metrics.ShadowsocksMetrics
+	Timeout               time.Duration
+	ShouldHandleLocally   HandleLocalPredicate   // determines whether an upstream should be handled by the listener locally or dial upstream
+	TargetIPValidator     onet.TargetIPValidator // determines validity of non-local upstream dials
+	MaxPendingConnections int                    // defaults to 1000
 }
 
 // GetDefaultMetrics returns the singleton metrics.ShadowsocksMetrics instance
@@ -103,9 +105,14 @@ func ListenLocalTCP(addr string, ciphers service.CipherList, replayHistory int) 
 // Any upstream handling should be handled by the caller of Accept() for any connection returned.
 func ListenLocalTCPOptions(options *ListenerOptions) net.Listener {
 
+	maxPending := options.MaxPendingConnections
+	if maxPending == 0 {
+		maxPending = defaultMaxPending
+	}
+
 	l := &llistener{
 		wrapped:      options.Listener,
-		connections:  make(chan net.Conn, 1000),
+		connections:  make(chan net.Conn, maxPending),
 		closedSignal: make(chan struct{}),
 	}
 
