@@ -8,7 +8,11 @@ import (
 	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
 )
 
-const DefaultCipher = "chacha20-ietf-poly1305"
+const (
+	DefaultCipher        = "chacha20-ietf-poly1305"
+	DefaultReplayHistory = 10000
+	DefaultMaxPending    = 1000
+)
 
 type CipherConfig struct {
 	ID     string
@@ -35,6 +39,9 @@ func UpdateCipherList(cipherList service.CipherList, configs []CipherConfig) err
 		cipher := config.Cipher
 		if cipher == "" {
 			cipher = DefaultCipher
+		}
+		if config.Secret == "" {
+			return fmt.Errorf("Secret was not specified for cipher %s", config.ID)
 		}
 		ci, err := ss.NewCipher(cipher, config.Secret)
 		if err != nil {

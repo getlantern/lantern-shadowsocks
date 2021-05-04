@@ -17,7 +17,6 @@ import (
 
 var (
 	ErrListenerClosed = errors.New("listener closed")
-	defaultMaxPending = 1000
 
 	defaultMetrics  metrics.ShadowsocksMetrics
 	initMetricsOnce sync.Once
@@ -107,7 +106,7 @@ func ListenLocalTCPOptions(options *ListenerOptions) net.Listener {
 
 	maxPending := options.MaxPendingConnections
 	if maxPending == 0 {
-		maxPending = defaultMaxPending
+		maxPending = DefaultMaxPending
 	}
 
 	l := &llistener{
