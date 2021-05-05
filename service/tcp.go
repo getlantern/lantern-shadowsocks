@@ -89,7 +89,7 @@ func findAccessKey(clientReader io.Reader, clientIP net.IP, cipherList CipherLis
 func findEntry(firstBytes []byte, ciphers []*list.Element) (*CipherEntry, *list.Element) {
 	// To hold the decrypted chunk length.
 	chunkLenBuf := [2]byte{}
-	for ci, elt := range ciphers {
+	for _, elt := range ciphers {
 		entry := elt.Value.(*CipherEntry)
 		id, cipher := entry.ID, entry.Cipher
 		saltsize := cipher.SaltSize()
@@ -101,7 +101,7 @@ func findEntry(firstBytes []byte, ciphers []*list.Element) (*CipherEntry, *list.
 			debugTCP(id, "Failed to decrypt length: %v", err)
 			continue
 		}
-		debugTCP(id, "Found cipher at index %d", ci)
+		// debugTCP(id, "Found cipher at index %d", ci)
 		// Move the active cipher to the front, so that the search is quicker next time.
 		return entry, elt
 	}
@@ -225,7 +225,7 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 	if err != nil {
 		logger.Warningf("Failed location lookup: %v", err)
 	}
-	logger.Debugf("Got location \"%v\" for IP %v", clientLocation, clientTCPConn.RemoteAddr().String())
+	//logger.Debugf("Got location \"%v\" for IP %v", clientLocation, clientTCPConn.RemoteAddr().String())
 	s.m.AddOpenTCPConnection(clientLocation)
 
 	connStart := time.Now()
@@ -275,7 +275,7 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 		}
 		defer tgtConn.Close()
 
-		logger.Debugf("proxy %s <-> %s", clientTCPConn.RemoteAddr().String(), tgtConn.RemoteAddr().String())
+		// logger.Debugf("proxy %s <-> %s", clientTCPConn.RemoteAddr().String(), tgtConn.RemoteAddr().String())
 		ssw := ss.NewShadowsocksWriter(clientConn, cipherEntry.Cipher)
 		ssw.SetSaltGenerator(cipherEntry.SaltGenerator)
 
@@ -320,7 +320,7 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 	}
 	s.m.AddClosedTCPConnection(clientLocation, id, status, proxyMetrics, timeToCipher, connDuration)
 	clientConn.Close() // Closing after the metrics are added aids integration testing.
-	logger.Debugf("Done with status %v, duration %v", status, connDuration)
+	// logger.Debugf("Done with status %v, duration %v", status, connDuration)
 }
 
 // Keep the connection open until we hit the authentication deadline to protect against probing attacks
