@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/getlantern/netx"
+
 	onet "github.com/getlantern/lantern-shadowsocks/net"
 	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
 	"github.com/getlantern/lantern-shadowsocks/slicepool"
@@ -35,7 +37,7 @@ type Client interface {
 // TODO: add a dialer argument to support proxy chaining and transport changes.
 func NewClient(host string, port int, password, cipherName string) (Client, error) {
 	// TODO: consider using net.LookupIP to get a list of IPs, and add logic for optimal selection.
-	proxyIP, err := net.ResolveIPAddr("ip", host)
+	proxyIP, err := netx.ResolveIPAddr("ip", host)
 	if err != nil {
 		return nil, errors.New("Failed to resolve proxy address")
 	}
@@ -71,7 +73,7 @@ func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, e
 		return nil, errors.New("Failed to parse target address")
 	}
 	proxyAddr := &net.TCPAddr{IP: c.proxyIP, Port: c.proxyPort}
-	proxyConn, err := net.DialTCP("tcp", laddr, proxyAddr)
+	proxyConn, err := netx.DialTCP("tcp", laddr, proxyAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +92,7 @@ func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, e
 
 func (c *ssClient) ListenUDP(laddr *net.UDPAddr) (net.PacketConn, error) {
 	proxyAddr := &net.UDPAddr{IP: c.proxyIP, Port: c.proxyPort}
-	pc, err := net.DialUDP("udp", laddr, proxyAddr)
+	pc, err := netx.DialUDP("udp", laddr, proxyAddr)
 	if err != nil {
 		return nil, err
 	}

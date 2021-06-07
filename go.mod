@@ -3,7 +3,7 @@ module github.com/getlantern/lantern-shadowsocks
 require (
 	github.com/getlantern/fdcount v0.0.0-20210503151800-5decd65b3731
 	github.com/getlantern/grtrack v0.0.0-20160824195228-cbf67d3fa0fd
-	github.com/getlantern/mtime v0.0.0-20200417132445-23682092d1f7 // indirect
+	github.com/getlantern/netx v0.0.0-20210528033736-40a081680b7d
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
 	github.com/oschwald/geoip2-golang v1.4.0
