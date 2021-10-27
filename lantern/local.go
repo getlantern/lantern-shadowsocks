@@ -205,12 +205,10 @@ func (l *lduplex) CloseRead() error {
 	return l.Conn.Close()
 }
 
-// this is triggered when a client finishes writing,
-// it is handled as a no-op, we just ignore it since
-// we don't depend on half closing the connection to
-// signal anything.
+// this is triggered when a client finishes writing.
+// This triggers a close of both ends.
 func (l *lduplex) CloseWrite() error {
-	return nil
+	return l.Conn.Close()
 }
 
 // this is an adapter that forwards the remote address
