@@ -17,6 +17,7 @@ import (
 	"github.com/getlantern/lantern-shadowsocks/service"
 	"github.com/getlantern/lantern-shadowsocks/service/metrics"
 	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -154,7 +155,9 @@ func TestConcurrentLocalUpstreamHandling(t *testing.T) {
 			}
 
 			go func(c net.Conn) {
-				defer c.Close()
+				// n.b. We do not close this side of the connection to simulate conditions in which
+				// the client closes before the proxy (this should not result in leaks).
+
 				buf := make([]byte, 2*reqLen)
 				n, err := c.Read(buf)
 				if err != nil {
@@ -222,6 +225,8 @@ func TestConcurrentLocalUpstreamHandling(t *testing.T) {
 	}
 
 	l1.Close()
-	require.Nil(t, fdc.AssertDelta(0), "After closing listener, there should be no lingering file descriptors")
+	assert.NoError(
+		t, fdc.AssertDelta(0),
+		"After closing listener, there should be no lingering file descriptors")
 	grtracker.Check(t)
 }
