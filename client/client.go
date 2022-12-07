@@ -28,6 +28,11 @@ type Client interface {
 	// ListenUDP relays UDP packets though a Shadowsocks proxy.
 	// `laddr` is a local bind address, a local address is automatically chosen if nil.
 	ListenUDP(laddr *net.UDPAddr) (net.PacketConn, error)
+
+	// SetTCPSaltGenerator controls the SaltGenerator used for TCP upstream.
+	// `salter` may be `nil`.
+	// This method is not thread-safe.
+	SetTCPSaltGenerator(ss.SaltGenerator)
 }
 
 // NewClient creates a client that routes connections to a Shadowsocks proxy listening at
@@ -51,6 +56,11 @@ type ssClient struct {
 	proxyIP   net.IP
 	proxyPort int
 	cipher    *ss.Cipher
+	salter    ss.SaltGenerator
+}
+
+func (c *ssClient) SetTCPSaltGenerator(salter ss.SaltGenerator) {
+	c.salter = salter
 }
 
 // This code contains an optimization to send the initial client payload along with
@@ -76,6 +86,9 @@ func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, e
 		return nil, err
 	}
 	ssw := ss.NewShadowsocksWriter(proxyConn, c.cipher)
+	if c.salter != nil {
+		ssw.SetSaltGenerator(c.salter)
+	}
 	_, err = ssw.LazyWrite(socksTargetAddr)
 	if err != nil {
 		proxyConn.Close()

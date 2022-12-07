@@ -38,7 +38,7 @@ type ShadowsocksMetrics interface {
 	// TCP metrics
 	AddOpenTCPConnection(clientLocation string)
 	AddClosedTCPConnection(clientLocation, accessKey, status string, data ProxyMetrics, timeToCipher, duration time.Duration)
-	AddTCPProbe(clientLocation, status, drainResult string, port int, data ProxyMetrics)
+	AddTCPProbe(status, drainResult string, port int, data ProxyMetrics)
 
 	// UDP metrics
 	AddUDPPacketFromClient(clientLocation, accessKey, status string, clientProxyBytes, proxyTargetBytes int, timeToCipher time.Duration)
@@ -50,11 +50,12 @@ type ShadowsocksMetrics interface {
 type shadowsocksMetrics struct {
 	ipCountryDB *geoip2.Reader
 
-	buildInfo      *prometheus.GaugeVec
-	accessKeys     prometheus.Gauge
-	ports          prometheus.Gauge
-	dataBytes      *prometheus.CounterVec
-	timeToCipherMs *prometheus.HistogramVec
+	buildInfo            *prometheus.GaugeVec
+	accessKeys           prometheus.Gauge
+	ports                prometheus.Gauge
+	dataBytes            *prometheus.CounterVec
+	dataBytesPerLocation *prometheus.CounterVec
+	timeToCipherMs       *prometheus.HistogramVec
 	// TODO: Add time to first byte.
 
 	tcpProbes               *prometheus.HistogramVec
@@ -62,11 +63,13 @@ type shadowsocksMetrics struct {
 	tcpClosedConnections    *prometheus.CounterVec
 	tcpConnectionDurationMs *prometheus.HistogramVec
 
-	udpAddedNatEntries   prometheus.Counter
-	udpRemovedNatEntries prometheus.Counter
+	udpPacketsFromClientPerLocation *prometheus.CounterVec
+	udpAddedNatEntries              prometheus.Counter
+	udpRemovedNatEntries            prometheus.Counter
 }
 
 func newShadowsocksMetrics(ipCountryDB *geoip2.Reader) *shadowsocksMetrics {
+	// Don't forget to pass the counters to the registerer.MustRegister call in NewPrometheusShadowsocksMetrics.
 	return &shadowsocksMetrics{
 		ipCountryDB: ipCountryDB,
 		buildInfo: prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -84,6 +87,12 @@ func newShadowsocksMetrics(ipCountryDB *geoip2.Reader) *shadowsocksMetrics {
 			Name:      "ports",
 			Help:      "Count of open Shadowsocks ports",
 		}),
+		tcpProbes: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "shadowsocks",
+			Name:      "tcp_probes",
+			Buckets:   []float64{0, 49, 50, 51, 73, 91},
+			Help:      "Histogram of number of bytes from client to proxy, for detecting possible probes",
+		}, []string{"port", "status", "error"}),
 		tcpOpenConnections: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "shadowsocks",
 			Subsystem: "tcp",
@@ -115,14 +124,14 @@ func newShadowsocksMetrics(ipCountryDB *geoip2.Reader) *shadowsocksMetrics {
 			prometheus.CounterOpts{
 				Namespace: "shadowsocks",
 				Name:      "data_bytes",
-				Help:      "Bytes transferred by the proxy",
-			}, []string{"dir", "proto", "location", "status", "access_key"}),
-		tcpProbes: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Namespace: "shadowsocks",
-			Name:      "tcp_probes",
-			Buckets:   []float64{0, 49, 50, 51, 73, 91},
-			Help:      "Histogram of number of bytes from client to proxy, for detecting possible probes",
-		}, []string{"location", "port", "status", "error"}),
+				Help:      "Bytes transferred by the proxy, per access key",
+			}, []string{"dir", "proto", "access_key"}),
+		dataBytesPerLocation: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "shadowsocks",
+				Name:      "data_bytes_per_location",
+				Help:      "Bytes transferred by the proxy, per location",
+			}, []string{"dir", "proto", "location"}),
 		timeToCipherMs: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: "shadowsocks",
@@ -130,6 +139,13 @@ func newShadowsocksMetrics(ipCountryDB *geoip2.Reader) *shadowsocksMetrics {
 				Help:      "Time needed to find the cipher",
 				Buckets:   []float64{0.1, 1, 10, 100, 1000},
 			}, []string{"proto", "found_key"}),
+		udpPacketsFromClientPerLocation: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "shadowsocks",
+				Subsystem: "udp",
+				Name:      "packets_from_client_per_location",
+				Help:      "Packets received from the client, per location and status",
+			}, []string{"location", "status"}),
 		udpAddedNatEntries: prometheus.NewCounter(
 			prometheus.CounterOpts{
 				Namespace: "shadowsocks",
@@ -154,8 +170,8 @@ func newShadowsocksMetrics(ipCountryDB *geoip2.Reader) *shadowsocksMetrics {
 func NewPrometheusShadowsocksMetrics(ipCountryDB *geoip2.Reader, registerer prometheus.Registerer) ShadowsocksMetrics {
 	m := newShadowsocksMetrics(ipCountryDB)
 	// TODO: Is it possible to pass where to register the collectors?
-	registerer.MustRegister(m.buildInfo, m.accessKeys, m.ports, m.tcpOpenConnections, m.tcpProbes, m.tcpClosedConnections, m.tcpConnectionDurationMs,
-		m.dataBytes, m.timeToCipherMs, m.udpAddedNatEntries, m.udpRemovedNatEntries)
+	registerer.MustRegister(m.buildInfo, m.accessKeys, m.ports, m.tcpProbes, m.tcpOpenConnections, m.tcpClosedConnections, m.tcpConnectionDurationMs,
+		m.dataBytes, m.dataBytesPerLocation, m.timeToCipherMs, m.udpPacketsFromClientPerLocation, m.udpAddedNatEntries, m.udpRemovedNatEntries)
 	return m
 }
 
@@ -216,9 +232,9 @@ func isFound(accessKey string) string {
 }
 
 // addIfNonZero helps avoid the creation of series that are always zero.
-func addIfNonZero(counter prometheus.Counter, value int64) {
+func addIfNonZero(value int64, counterVec *prometheus.CounterVec, lvs ...string) {
 	if value > 0 {
-		counter.Add(float64(value))
+		counterVec.WithLabelValues(lvs...).Add(float64(value))
 	}
 }
 
@@ -226,25 +242,34 @@ func (m *shadowsocksMetrics) AddClosedTCPConnection(clientLocation, accessKey, s
 	m.tcpClosedConnections.WithLabelValues(clientLocation, status, accessKey).Inc()
 	m.tcpConnectionDurationMs.WithLabelValues(status).Observe(duration.Seconds() * 1000)
 	m.timeToCipherMs.WithLabelValues("tcp", isFound(accessKey)).Observe(timeToCipher.Seconds() * 1000)
-	addIfNonZero(m.dataBytes.WithLabelValues("c>p", "tcp", clientLocation, status, accessKey), data.ClientProxy)
-	addIfNonZero(m.dataBytes.WithLabelValues("p>t", "tcp", clientLocation, status, accessKey), data.ProxyTarget)
-	addIfNonZero(m.dataBytes.WithLabelValues("p<t", "tcp", clientLocation, status, accessKey), data.TargetProxy)
-	addIfNonZero(m.dataBytes.WithLabelValues("c<p", "tcp", clientLocation, status, accessKey), data.ProxyClient)
+	addIfNonZero(data.ClientProxy, m.dataBytes, "c>p", "tcp", accessKey)
+	addIfNonZero(data.ClientProxy, m.dataBytesPerLocation, "c>p", "tcp", clientLocation)
+	addIfNonZero(data.ProxyTarget, m.dataBytes, "p>t", "tcp", accessKey)
+	addIfNonZero(data.ProxyTarget, m.dataBytesPerLocation, "p>t", "tcp", clientLocation)
+	addIfNonZero(data.TargetProxy, m.dataBytes, "p<t", "tcp", accessKey)
+	addIfNonZero(data.TargetProxy, m.dataBytesPerLocation, "p<t", "tcp", clientLocation)
+	addIfNonZero(data.ProxyClient, m.dataBytes, "c<p", "tcp", accessKey)
+	addIfNonZero(data.ProxyClient, m.dataBytesPerLocation, "c<p", "tcp", clientLocation)
 }
 
-func (m *shadowsocksMetrics) AddTCPProbe(clientLocation, status, drainResult string, port int, data ProxyMetrics) {
-	m.tcpProbes.WithLabelValues(clientLocation, strconv.Itoa(port), status, drainResult).Observe(float64(data.ClientProxy))
+func (m *shadowsocksMetrics) AddTCPProbe(status, drainResult string, port int, data ProxyMetrics) {
+	m.tcpProbes.WithLabelValues(strconv.Itoa(port), status, drainResult).Observe(float64(data.ClientProxy))
 }
 
 func (m *shadowsocksMetrics) AddUDPPacketFromClient(clientLocation, accessKey, status string, clientProxyBytes, proxyTargetBytes int, timeToCipher time.Duration) {
 	m.timeToCipherMs.WithLabelValues("udp", isFound(accessKey)).Observe(timeToCipher.Seconds() * 1000)
-	addIfNonZero(m.dataBytes.WithLabelValues("c>p", "udp", clientLocation, status, accessKey), int64(clientProxyBytes))
-	addIfNonZero(m.dataBytes.WithLabelValues("p>t", "udp", clientLocation, status, accessKey), int64(proxyTargetBytes))
+	m.udpPacketsFromClientPerLocation.WithLabelValues(clientLocation, status).Inc()
+	addIfNonZero(int64(clientProxyBytes), m.dataBytes, "c>p", "udp", accessKey)
+	addIfNonZero(int64(clientProxyBytes), m.dataBytesPerLocation, "c>p", "udp", clientLocation)
+	addIfNonZero(int64(proxyTargetBytes), m.dataBytes, "p>t", "udp", accessKey)
+	addIfNonZero(int64(proxyTargetBytes), m.dataBytesPerLocation, "p>t", "udp", clientLocation)
 }
 
 func (m *shadowsocksMetrics) AddUDPPacketFromTarget(clientLocation, accessKey, status string, targetProxyBytes, proxyClientBytes int) {
-	addIfNonZero(m.dataBytes.WithLabelValues("p<t", "udp", clientLocation, status, accessKey), int64(targetProxyBytes))
-	addIfNonZero(m.dataBytes.WithLabelValues("c<p", "udp", clientLocation, status, accessKey), int64(proxyClientBytes))
+	addIfNonZero(int64(targetProxyBytes), m.dataBytes, "p<t", "udp", accessKey)
+	addIfNonZero(int64(targetProxyBytes), m.dataBytesPerLocation, "p<t", "udp", clientLocation)
+	addIfNonZero(int64(proxyClientBytes), m.dataBytes, "c<p", "udp", accessKey)
+	addIfNonZero(int64(proxyClientBytes), m.dataBytesPerLocation, "c<p", "udp", clientLocation)
 }
 
 func (m *shadowsocksMetrics) AddUDPNatEntry() {
@@ -310,7 +335,7 @@ func MeasureConn(conn onet.DuplexConn, bytesSent, bytesReceived *int64) onet.Dup
 type NoOpMetrics struct{}
 
 func (m *NoOpMetrics) SetBuildInfo(version string) {}
-func (m *NoOpMetrics) AddTCPProbe(clientLocation, status, drainResult string, port int, data ProxyMetrics) {
+func (m *NoOpMetrics) AddTCPProbe(status, drainResult string, port int, data ProxyMetrics) {
 }
 func (m *NoOpMetrics) AddClosedTCPConnection(clientLocation, accessKey, status string, data ProxyMetrics, timeToCipher, duration time.Duration) {
 }
