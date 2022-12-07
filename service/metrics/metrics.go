@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"time"
 
-	onet "github.com/getlantern/lantern-shadowsocks/net"
+	onet "github.com/Jigsaw-Code/outline-ss-server/net"
 	geoip2 "github.com/oschwald/geoip2-golang"
 	"github.com/prometheus/client_golang/prometheus"
 )

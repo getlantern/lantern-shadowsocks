@@ -13,10 +13,10 @@ import (
 	"github.com/getlantern/grtrack"
 	logging "github.com/op/go-logging"
 
-	"github.com/getlantern/lantern-shadowsocks/client"
-	"github.com/getlantern/lantern-shadowsocks/service"
-	"github.com/getlantern/lantern-shadowsocks/service/metrics"
-	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
+	"github.com/Jigsaw-Code/outline-ss-server/client"
+	"github.com/Jigsaw-Code/outline-ss-server/service"
+	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
+	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
 	"github.com/stretchr/testify/require"
 )
 

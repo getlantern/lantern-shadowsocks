@@ -4,8 +4,8 @@ import (
 	"container/list"
 	"fmt"
 
-	"github.com/getlantern/lantern-shadowsocks/service"
-	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
+	"github.com/Jigsaw-Code/outline-ss-server/service"
+	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
 )
 
 const (

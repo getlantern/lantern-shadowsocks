@@ -10,9 +10,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	onet "github.com/getlantern/lantern-shadowsocks/net"
-	"github.com/getlantern/lantern-shadowsocks/service"
-	"github.com/getlantern/lantern-shadowsocks/service/metrics"
+	onet "github.com/Jigsaw-Code/outline-ss-server/net"
+	"github.com/Jigsaw-Code/outline-ss-server/service"
+	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
 )
 
 var (
