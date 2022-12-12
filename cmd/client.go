@@ -1,14 +1,15 @@
+// cmd/client.go runs a client that connects to a running Shadowsocks server
+// and asserts that a TCP connection can be made to Google (as a stable
+// example) and that the response is what we expect.
 package main
 
 import (
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/getlantern/lantern-shadowsocks/client"
 )
@@ -56,32 +57,6 @@ func main() {
 	}
 
 	fmt.Println("Success!")
-}
-
-func startTCPEchoServer() (*net.TCPListener, *sync.WaitGroup, error) {
-	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
-	if err != nil {
-		return nil, nil, fmt.Errorf("net.ListenTCP failed: %v", err)
-	}
-	var running sync.WaitGroup
-	running.Add(1)
-	go func() {
-		defer running.Done()
-		for {
-			clientConn, err := listener.AcceptTCP()
-			if err != nil {
-				fmt.Printf("ERROR: AcceptTCP failed: %v\n", err)
-				return
-			}
-			running.Add(1)
-			go func() {
-				defer running.Done()
-				io.Copy(clientConn, clientConn)
-				clientConn.Close()
-			}()
-		}
-	}()
-	return listener, &running, nil
 }
 
 // connDialer is a net.Dialer that always returns the same connection.
