@@ -28,7 +28,7 @@ func TestCipherReaderAuthenticationFailure(t *testing.T) {
 	cipher := newTestCipher(t)
 
 	clientReader := strings.NewReader("Fails Authentication")
-	reader := NewShadowsocksReader(clientReader, cipher)
+	reader := NewShadowsocksReader(clientReader, cipher, nil)
 	_, err := reader.Read(make([]byte, 1))
 	if err == nil {
 		t.Fatalf("Expected authentication failure, got %v", err)
@@ -39,7 +39,7 @@ func TestCipherReaderUnexpectedEOF(t *testing.T) {
 	cipher := newTestCipher(t)
 
 	clientReader := strings.NewReader("short")
-	server := NewShadowsocksReader(clientReader, cipher)
+	server := NewShadowsocksReader(clientReader, cipher, nil)
 	_, err := server.Read(make([]byte, 10))
 	if err != io.ErrUnexpectedEOF {
 		t.Fatalf("Expected ErrUnexpectedEOF, got %v", err)
@@ -50,7 +50,7 @@ func TestCipherReaderEOF(t *testing.T) {
 	cipher := newTestCipher(t)
 
 	clientReader := strings.NewReader("")
-	server := NewShadowsocksReader(clientReader, cipher)
+	server := NewShadowsocksReader(clientReader, cipher, nil)
 	_, err := server.Read(make([]byte, 10))
 	if err != io.EOF {
 		t.Fatalf("Expected EOF, got %v", err)
@@ -101,7 +101,7 @@ func TestCipherReaderGoodReads(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reader := NewShadowsocksReader(ssText, cipher)
+	reader := NewShadowsocksReader(ssText, cipher, nil)
 	plainText := make([]byte, len("[First Block]")+len("[Third Block]"))
 	n, err := io.ReadFull(reader, plainText)
 	if err != nil {
@@ -121,7 +121,7 @@ func TestCipherReaderClose(t *testing.T) {
 	cipher := newTestCipher(t)
 
 	pipeReader, pipeWriter := io.Pipe()
-	server := NewShadowsocksReader(pipeReader, cipher)
+	server := NewShadowsocksReader(pipeReader, cipher, nil)
 	result := make(chan error)
 	go func() {
 		_, err := server.Read(make([]byte, 10))
@@ -138,7 +138,7 @@ func TestCipherReaderCloseError(t *testing.T) {
 	cipher := newTestCipher(t)
 
 	pipeReader, pipeWriter := io.Pipe()
-	server := NewShadowsocksReader(pipeReader, cipher)
+	server := NewShadowsocksReader(pipeReader, cipher, nil)
 	result := make(chan error)
 	go func() {
 		_, err := server.Read(make([]byte, 10))
@@ -155,8 +155,8 @@ func TestEndToEnd(t *testing.T) {
 	cipher := newTestCipher(t)
 
 	connReader, connWriter := io.Pipe()
-	writer := NewShadowsocksWriter(connWriter, cipher)
-	reader := NewShadowsocksReader(connReader, cipher)
+	writer := NewShadowsocksWriter(connWriter, cipher, nil)
+	reader := NewShadowsocksReader(connReader, cipher, nil)
 	expected := "Test"
 	go func() {
 		defer connWriter.Close()
@@ -178,7 +178,7 @@ func TestEndToEnd(t *testing.T) {
 func TestLazyWriteFlush(t *testing.T) {
 	cipher := newTestCipher(t)
 	buf := new(bytes.Buffer)
-	writer := NewShadowsocksWriter(buf, cipher)
+	writer := NewShadowsocksWriter(buf, cipher, nil)
 	header := []byte{1, 2, 3, 4}
 	n, err := writer.LazyWrite(header)
 	if n != len(header) {
@@ -212,7 +212,7 @@ func TestLazyWriteFlush(t *testing.T) {
 	}
 
 	// Verify content arrives in two blocks
-	reader := NewShadowsocksReader(buf, cipher)
+	reader := NewShadowsocksReader(buf, cipher, nil)
 	decrypted := make([]byte, len(header)+len(body))
 	n, err = reader.Read(decrypted)
 	if n != len(header) {
@@ -239,7 +239,7 @@ func TestLazyWriteFlush(t *testing.T) {
 func TestLazyWriteConcat(t *testing.T) {
 	cipher := newTestCipher(t)
 	buf := new(bytes.Buffer)
-	writer := NewShadowsocksWriter(buf, cipher)
+	writer := NewShadowsocksWriter(buf, cipher, nil)
 	header := []byte{1, 2, 3, 4}
 	n, err := writer.LazyWrite(header)
 	if n != len(header) {
@@ -275,7 +275,7 @@ func TestLazyWriteConcat(t *testing.T) {
 	}
 
 	// Verify content arrives in one block
-	reader := NewShadowsocksReader(buf, cipher)
+	reader := NewShadowsocksReader(buf, cipher, nil)
 	decrypted := make([]byte, len(body)+len(header))
 	n, err = reader.Read(decrypted)
 	if n != len(decrypted) {
@@ -293,7 +293,7 @@ func TestLazyWriteConcat(t *testing.T) {
 func TestLazyWriteOversize(t *testing.T) {
 	cipher := newTestCipher(t)
 	buf := new(bytes.Buffer)
-	writer := NewShadowsocksWriter(buf, cipher)
+	writer := NewShadowsocksWriter(buf, cipher, nil)
 	N := 25000 // More than one block, less than two.
 	data := make([]byte, N)
 	for i := range data {
@@ -317,7 +317,7 @@ func TestLazyWriteOversize(t *testing.T) {
 	}
 
 	// Verify content
-	reader := NewShadowsocksReader(buf, cipher)
+	reader := NewShadowsocksReader(buf, cipher, nil)
 	decrypted, err := ioutil.ReadAll(reader)
 	if len(decrypted) != N {
 		t.Errorf("Wrong number of bytes out: %d", len(decrypted))
@@ -333,7 +333,7 @@ func TestLazyWriteOversize(t *testing.T) {
 func TestLazyWriteConcurrentFlush(t *testing.T) {
 	cipher := newTestCipher(t)
 	buf := new(bytes.Buffer)
-	writer := NewShadowsocksWriter(buf, cipher)
+	writer := NewShadowsocksWriter(buf, cipher, nil)
 	header := []byte{1, 2, 3, 4}
 	n, err := writer.LazyWrite(header)
 	if n != len(header) {
@@ -388,7 +388,7 @@ func TestLazyWriteConcurrentFlush(t *testing.T) {
 	}
 
 	// Verify content arrives in two blocks
-	reader := NewShadowsocksReader(buf, cipher)
+	reader := NewShadowsocksReader(buf, cipher, nil)
 	decrypted := make([]byte, len(header)+len(body))
 	n, err = reader.Read(decrypted)
 	if n != len(header) {
