@@ -26,9 +26,9 @@ import (
 	"syscall"
 	"time"
 
-	onet "github.com/getlantern/lantern-shadowsocks/net"
-	"github.com/getlantern/lantern-shadowsocks/service/metrics"
-	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
+	onet "github.com/Jigsaw-Code/outline-ss-server/net"
+	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
+	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
 	logging "github.com/op/go-logging"
 	"github.com/shadowsocks/go-shadowsocks2/socks"
 )
@@ -338,7 +338,7 @@ func (s *tcpService) absorbProbe(listenerPort int, clientConn io.ReadCloser, cli
 	_, drainErr := io.Copy(ioutil.Discard, clientConn) // drain socket
 	drainResult := drainErrToString(drainErr)
 	logger.Debugf("Drain error: %v, drain result: %v", drainErr, drainResult)
-	s.m.AddTCPProbe(clientLocation, status, drainResult, listenerPort, *proxyMetrics)
+	s.m.AddTCPProbe(status, drainResult, listenerPort, *proxyMetrics)
 }
 
 func drainErrToString(drainErr error) string {

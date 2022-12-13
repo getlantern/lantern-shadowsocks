@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	onet "github.com/getlantern/lantern-shadowsocks/net"
-	ss "github.com/getlantern/lantern-shadowsocks/shadowsocks"
+	onet "github.com/Jigsaw-Code/outline-ss-server/net"
+	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
 	"github.com/shadowsocks/go-shadowsocks2/socks"
 )
 
@@ -110,6 +110,54 @@ func TestShadowsocksClient_DialTCPFastClose(t *testing.T) {
 	conn.Close()
 	// Wait for the listener to verify the close.
 	<-done
+}
+
+func TestShadowsocksClient_TCPPrefix(t *testing.T) {
+	prefix := []byte("test prefix")
+
+	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatalf("ListenTCP failed: %v", err)
+	}
+	var running sync.WaitGroup
+	running.Add(1)
+	go func() {
+		defer running.Done()
+		defer listener.Close()
+		clientConn, err := listener.AcceptTCP()
+		if err != nil {
+			t.Logf("AcceptTCP failed: %v", err)
+			return
+		}
+		defer clientConn.Close()
+		prefixReceived := make([]byte, len(prefix))
+		if _, err := io.ReadFull(clientConn, prefixReceived); err != nil {
+			t.Error(err)
+		}
+		for i := range prefix {
+			if prefixReceived[i] != prefix[i] {
+				t.Error("prefix contents mismatch")
+			}
+		}
+	}()
+
+	proxyHost, proxyPort, err := splitHostPortNumber(listener.Addr().String())
+	if err != nil {
+		t.Fatalf("Failed to parse proxy address: %v", err)
+	}
+
+	d, err := NewClient(proxyHost, proxyPort, testPassword, ss.TestCipher)
+	if err != nil {
+		t.Error(err)
+	}
+	d.SetTCPSaltGenerator(NewPrefixSaltGenerator(prefix))
+	conn, err := d.DialTCP(nil, testTargetAddr)
+	if err != nil {
+		t.Fatalf("ShadowsocksClient.DialTCP failed: %v", err)
+	}
+	conn.Write(nil)
+	conn.Close()
+	running.Wait()
 }
 
 func TestShadowsocksClient_ListenUDP(t *testing.T) {

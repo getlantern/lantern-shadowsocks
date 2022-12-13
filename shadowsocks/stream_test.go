@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-func newTestCipher(t *testing.T) *Cipher {
+func newTestCipher(t testing.TB) *Cipher {
 	cipher, err := NewCipher("chacha20-ietf-poly1305", "test secret")
 	if err != nil {
 		t.Fatal(err)
@@ -410,4 +410,32 @@ func TestLazyWriteConcurrentFlush(t *testing.T) {
 	if !bytes.Equal(decrypted[len(header):], body) {
 		t.Errorf("Wrong final content: %v", decrypted)
 	}
+}
+
+type nullIO struct{}
+
+func (n *nullIO) Write(b []byte) (int, error) {
+	return len(b), nil
+}
+
+func (r *nullIO) Read(b []byte) (int, error) {
+	return len(b), nil
+}
+
+// Microbenchmark for the performance of Shadowsocks TCP encryption.
+func BenchmarkWriter(b *testing.B) {
+	b.StopTimer()
+	b.ResetTimer()
+
+	cipher := newTestCipher(b)
+	writer := NewShadowsocksWriter(new(nullIO), cipher)
+
+	start := time.Now()
+	b.StartTimer()
+	io.CopyN(writer, new(nullIO), int64(b.N))
+	b.StopTimer()
+	elapsed := time.Now().Sub(start)
+
+	megabits := 8 * float64(b.N) * 1e-6
+	b.ReportMetric(megabits/(elapsed.Seconds()), "mbps")
 }

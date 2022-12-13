@@ -1,4 +1,4 @@
-// Copyright 2020 Jigsaw Operations LLC
+// Copyright 2022 Jigsaw Operations LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package shadowsocks
 
 import (
 	"testing"
 	"time"
-
-	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
-func TestRunSSServer(t *testing.T) {
-	m := metrics.NewPrometheusShadowsocksMetrics(nil, prometheus.DefaultRegisterer)
-	server, err := RunSSServer("config_example.yml", 30*time.Second, m, 10000)
-	if err != nil {
-		t.Fatalf("RunSSServer() error = %v", err)
+// Microbenchmark for the performance of Shadowsocks UDP encryption.
+func BenchmarkPack(b *testing.B) {
+	b.StopTimer()
+	b.ResetTimer()
+
+	cipher := newTestCipher(b)
+	MTU := 1500
+	pkt := make([]byte, MTU)
+	plaintextBuf := pkt[cipher.SaltSize() : len(pkt)-cipher.TagSize()]
+
+	start := time.Now()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		Pack(pkt, plaintextBuf, cipher)
 	}
-	if err := server.Stop(); err != nil {
-		t.Errorf("Error while stopping server: %v", err)
-	}
+	b.StopTimer()
+	elapsed := time.Now().Sub(start)
+
+	megabits := float64(8*len(plaintextBuf)*b.N) * 1e-6
+	b.ReportMetric(megabits/(elapsed.Seconds()), "mbps")
 }
