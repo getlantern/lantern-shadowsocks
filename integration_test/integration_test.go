@@ -604,11 +604,6 @@ func BenchmarkUDPManyKeys(b *testing.B) {
 // this repo is a fork and upstream outline-ss-server doesn't have prefix
 // logic. This'll make rebasing in the future easier.
 func TestTCPEchoWithDNSOverTCPPrefix(t *testing.T) {
-	prefix, err := prefix.MakeDNSOverTCPPrefix(1500)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	echoListener, echoRunning := startTCPEchoServer(t)
 	proxyListener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
 	if err != nil {
@@ -623,7 +618,9 @@ func TestTCPEchoWithDNSOverTCPPrefix(t *testing.T) {
 	const testTimeout = 200 * time.Millisecond
 	proxy := service.NewTCPService(
 		cipherList, &replayCache, &metrics.NoOpMetrics{}, testTimeout,
-		&service.TCPServiceOptions{Prefix: prefix},
+		&service.TCPServiceOptions{
+			AbsorbPrefixFunc: prefix.AbsorbDNSOverTCPPrefix,
+		},
 	)
 	proxy.SetTargetIPValidator(allowAll)
 	go proxy.Serve(proxyListener)
@@ -638,7 +635,7 @@ func TestTCPEchoWithDNSOverTCPPrefix(t *testing.T) {
 	}
 	client, err := client.NewClient(
 		proxyHost, portNum, secrets[0], ss.TestCipher,
-		&client.ClientOptions{Prefix: prefix},
+		&client.ClientOptions{MakePrefixFunc: prefix.MakeDNSOverTCPPrefix},
 	)
 	if err != nil {
 		t.Fatalf("Failed to create ShadowsocksClient: %v", err)

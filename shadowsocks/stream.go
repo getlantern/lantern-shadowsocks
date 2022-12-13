@@ -60,7 +60,7 @@ type Writer struct {
 	// A prefix to prepend to every write.
 	// See "Adding prefixes to Shadowsocks packets" in the README for more
 	// info.
-	prefix []byte
+	makePrefixFunc prefix.MakePrefixFunc
 }
 
 // NewShadowsocksWriter creates a Writer that encrypts the given Writer using
@@ -70,12 +70,12 @@ type Writer struct {
 func NewShadowsocksWriter(
 	writer io.Writer,
 	ssCipher *Cipher,
-	prefix []byte) *Writer {
+	makePrefixFunc prefix.MakePrefixFunc) *Writer {
 	return &Writer{
-		writer:        writer,
-		ssCipher:      ssCipher,
-		saltGenerator: RandomSaltGenerator,
-		prefix:        prefix,
+		writer:         writer,
+		ssCipher:       ssCipher,
+		saltGenerator:  RandomSaltGenerator,
+		makePrefixFunc: makePrefixFunc,
 	}
 }
 
@@ -263,8 +263,12 @@ func (sw *Writer) flush() error {
 	sizeBlockSize := sw.encryptBlock(sizeBuf)
 	payloadSize := sw.encryptBlock(payloadBuf[:sw.pending])
 	bufToWrite := []byte{}
-	if sw.prefix != nil {
-		bufToWrite = append(bufToWrite, sw.prefix...)
+	if sw.makePrefixFunc != nil {
+		p, err := sw.makePrefixFunc()
+		if err != nil {
+			return fmt.Errorf("Failed to make required prefix: %w", err)
+		}
+		bufToWrite = append(bufToWrite, p...)
 	}
 	bufToWrite = append(bufToWrite, sw.buf[start:saltSize+sizeBlockSize+payloadSize]...)
 	// fmt.Printf("bufToWrite: %x\n", bufToWrite[0:3])
@@ -296,7 +300,7 @@ type chunkReader struct {
 	// A prefix to be expected with every new packet.
 	// See "Adding prefixes to Shadowsocks packets" in the README for more
 	// info.
-	prefix []byte
+	absorbPrefixFunc prefix.AbsorbPrefixFunc
 }
 
 // Reader is an io.Reader that also implements io.WriterTo to
@@ -311,13 +315,17 @@ type Reader interface {
 //
 // If prefix is non-nil, all packets must be prefixed with the given bytes, else
 // the reader will return an error.
-func NewShadowsocksReader(reader io.Reader, ssCipher *Cipher, prefix []byte) Reader {
+func NewShadowsocksReader(
+	reader io.Reader,
+	ssCipher *Cipher,
+	absorbPrefixFunc prefix.AbsorbPrefixFunc,
+) Reader {
 	return &readConverter{
 		cr: &chunkReader{
-			reader:   reader,
-			ssCipher: ssCipher,
-			payload:  readBufPool.LazySlice(),
-			prefix:   prefix,
+			reader:           reader,
+			ssCipher:         ssCipher,
+			payload:          readBufPool.LazySlice(),
+			absorbPrefixFunc: absorbPrefixFunc,
 		},
 	}
 }
@@ -365,10 +373,10 @@ func (cr *chunkReader) readMessage(buf []byte) error {
 func (cr *chunkReader) ReadChunk() ([]byte, error) {
 	// If prefix is non-nil, read the prefix from the header of every new
 	// packet.
-	if cr.prefix != nil {
-		if err := prefix.AbsorbPrefixFromReader(cr.reader, cr.prefix); err != nil {
-			return nil, fmt.Errorf("while absorbing prefix (%v) after init: %w",
-				cr.prefix, err)
+	if cr.absorbPrefixFunc != nil {
+		_, err := cr.absorbPrefixFunc(cr.reader)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to absorb required prefix: %w", err)
 		}
 	}
 

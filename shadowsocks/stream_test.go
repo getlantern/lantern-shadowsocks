@@ -428,7 +428,7 @@ func BenchmarkWriter(b *testing.B) {
 	b.ResetTimer()
 
 	cipher := newTestCipher(b)
-	writer := NewShadowsocksWriter(new(nullIO), cipher)
+	writer := NewShadowsocksWriter(new(nullIO), cipher, nil)
 
 	start := time.Now()
 	b.StartTimer()

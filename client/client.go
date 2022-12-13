@@ -38,21 +38,21 @@ type Client interface {
 
 type ClientOptions struct {
 	// A prefix to prepend to every write.
-	Prefix []byte
+	MakePrefixFunc func() ([]byte, error)
 }
 
 // NewClient creates a client that routes connections to a Shadowsocks proxy listening at
 // `host:port`, with authentication parameters `cipher` (AEAD) and `password`.
 // TODO: add a dialer argument to support proxy chaining and transport changes.
 func NewClient(host string, port int, password, cipherName string, opts ...*ClientOptions) (Client, error) {
-	var prefix []byte = nil
+	var makePrefixFunc func() ([]byte, error)
 	if opts != nil {
 		if len(opts) > 1 {
 			fmt.Printf(
 				"ERROR at NewClient: at most one ClientOptions argument is allowed")
 		}
-		if opts[0] != nil && opts[0].Prefix != nil {
-			prefix = opts[0].Prefix
+		if opts[0] != nil && opts[0].MakePrefixFunc != nil {
+			makePrefixFunc = opts[0].MakePrefixFunc
 		}
 	}
 
@@ -65,7 +65,7 @@ func NewClient(host string, port int, password, cipherName string, opts ...*Clie
 	if err != nil {
 		return nil, err
 	}
-	d := ssClient{proxyIP: proxyIP.IP, proxyPort: port, cipher: cipher, prefix: prefix}
+	d := ssClient{proxyIP: proxyIP.IP, proxyPort: port, cipher: cipher, makePrefixFunc: makePrefixFunc}
 	return &d, nil
 }
 
@@ -75,8 +75,8 @@ type ssClient struct {
 	cipher    *ss.Cipher
 	// A prefix to prepend to every write. See "Adding prefixes to Shadowsocks
 	// packets" in the README for more info.
-	prefix []byte
-	salter ss.SaltGenerator
+	makePrefixFunc func() ([]byte, error)
+	salter         ss.SaltGenerator
 }
 
 func (c *ssClient) SetTCPSaltGenerator(salter ss.SaltGenerator) {
@@ -105,7 +105,7 @@ func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, e
 	if err != nil {
 		return nil, err
 	}
-	ssw := ss.NewShadowsocksWriter(proxyConn, c.cipher, c.prefix)
+	ssw := ss.NewShadowsocksWriter(proxyConn, c.cipher, c.makePrefixFunc)
 	if c.salter != nil {
 		ssw.SetSaltGenerator(c.salter)
 	}
