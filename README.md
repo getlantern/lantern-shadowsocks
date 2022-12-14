@@ -186,54 +186,12 @@ You can do that with this fork like this:
 * Client initialization:
 
         // See client/client.go for more info
-        client, err := client.NewClient(
-          whateverHost, whateverPort, whateverPassword, whateverCipher,
-          &client.ClientOptions{Prefix: prefix},
-        )
+        cl, err := client.NewClient(whateverHost, whateverPort, whateverPassword, whateverCipher)
+        p := prefix.FromString("dnsovertcp")
+	      cl.SetTCPSaltGenerator(NewPrefixSaltGenerator(p.Make))
 
-* Server initialization:
+No service-side change is required but **make sure** the prefix is not too big since you're lowering the security of the encryption. See here: https://github.com/getlantern/lantern-shadowsocks/blob/ee3db22b920c79c4c5bc5c97892c7cd1d8a91627/client/salt.go#L46
 
-        // See service/tcp.go for more info
-        proxy := service.NewTCPService(
-          whateverCipherList,
-          whateverCache,
-          whateverMetrics,
-          whateverTimeout,
-          &service.TCPServiceOptions{Prefix: prefix},
-        )
-
-Note that the two prefixe above **must** be the same, else all packets are dropped.
-
-There's a specific prefix we use for some Iranian tracks in `prefix/dnsovertcp.go`. The test for it is in `integration_test/integration_test.go:TestTCPEchoWithDNSOverTCPPrefix`. Use it as a reference.
+There's a specific prefix we use for some Iranian tracks in `prefix/dnsovertcp.go`.
 
 **Important Note** while it is possible to do this in UDP as well, for now, we've only written the code for TCP messages (i.e., with `service/tcp.go`)
-
-#### Code Path
-
-For writing the prefix (i.e., client-side):
-
-- `shadowsocks/stream.go:Writer` buffers write calls until it reaches a specific length, then it sends them as one TCP packet over the wire in `shadowsocks/stream.go:Writer.flush()`
-- `shadowsocks/stream.go:Writer.flush()` handles assembling the Shadowsocks packet (e.g., encrypting each block, prepending the block size and salt)
-- If a prefix exists, it'll be prepended **before** the salt (i.e., as the first bytes of each TCP PSH/ACK packet)
-
-For reading the prefix (i.e., server-side), we have to first talk about how a TCP Shadowsocks packet header (i.e., first few bytes) is usually handled:
-
-- When a TCP Shadowsocks connection first occurs between client and server, the client calls `client/client.go:ssClient.DialTCP()`
-  - Then the server accepts the connection inside the infinite loop in `service/tcp.go:tcpService.Serve()`
-  - And calls `service/tcp.go:tcpService.handleConnection()`, which calls `service/tcp.go:findAccessKey()` which does two things:
-    - Reads the socket to check if the shadowsocks packet is correctly assembled (i.e., the salt and blocksize make sense)
-    - Then **puts back** whatever it read in a new reader and the flow continues
-- Afterwards, reads occur inside `shadowsocks/stream.go:chunkReader:ReadChunk()` **as if** it was reading from the wire for the first time
-
-So the prefix reading **must occur in two locations**, not just one:
-
-- When checking the packet header in `service/tcp.go:findAccessKey()`
-  - Then we put everything back, including the prefix
-- And when we actually read the packet inside `shadowsocks/stream.go:chunkReader:ReadChunk()`
-  - This is where we absorb the prefix indefinitely
-
-the prefix reading **can** be simplified to one location but it's best to keep it in the above two locations since this is a fork of [outline-ss-server](https://github.com/Jigsaw-Code/outline-ss-server) and it's best **not** to change the structure of the code dramatically to make rebasing easier.
-
-#### What happens when a client sends a packet with a prefix to a server not expecting it or vice versa?
-
-https://github.com/getlantern/lantern-shadowsocks/pull/10#issuecomment-1347023627

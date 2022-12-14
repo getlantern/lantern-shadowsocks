@@ -17,20 +17,25 @@ package client
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 
 	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
 )
 
 type prefixSaltGenerator struct {
-	prefix []byte
+	prefixFunc func() ([]byte, error)
 }
 
 func (g prefixSaltGenerator) GetSalt(salt []byte) error {
-	n := copy(salt, g.prefix)
-	if n != len(g.prefix) {
+	prefix, err := g.prefixFunc()
+	if err != nil {
+		return fmt.Errorf("failed to generate prefix: %v", err)
+	}
+	n := copy(salt, prefix)
+	if n != len(prefix) {
 		return errors.New("prefix is too long")
 	}
-	_, err := rand.Read(salt[n:])
+	_, err = rand.Read(salt[n:])
 	return err
 }
 
@@ -45,6 +50,6 @@ func (g prefixSaltGenerator) GetSalt(salt []byte) error {
 // not only decrypt the ciphertext of those two connections; they can also
 // easily recover the shadowsocks key and decrypt all other connections to
 // this server.  Use with care!
-func NewPrefixSaltGenerator(prefix []byte) ss.SaltGenerator {
-	return prefixSaltGenerator{prefix}
+func NewPrefixSaltGenerator(prefixFunc func() ([]byte, error)) ss.SaltGenerator {
+	return prefixSaltGenerator{prefixFunc}
 }

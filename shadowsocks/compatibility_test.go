@@ -37,10 +37,10 @@ func TestCompatibility(t *testing.T) {
 	go func() {
 		cipher, err := NewCipher(cipherName, secret)
 		require.Nil(t, err, "NewCipher failed: %v", err)
-		ssWriter := NewShadowsocksWriter(left, cipher, nil)
+		ssWriter := NewShadowsocksWriter(left, cipher)
 		ssWriter.Write([]byte(toRight))
 
-		ssReader := NewShadowsocksReader(left, cipher, nil)
+		ssReader := NewShadowsocksReader(left, cipher)
 		output := make([]byte, len(fromRight))
 		_, err = ssReader.Read(output)
 		require.Nil(t, err, "Read failed: %v", err)

@@ -150,7 +150,7 @@ func TestShadowsocksClient_TCPPrefix(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	d.SetTCPSaltGenerator(NewPrefixSaltGenerator(prefix))
+	d.SetTCPSaltGenerator(NewPrefixSaltGenerator(func() ([]byte, error) { return prefix, nil }))
 	conn, err := d.DialTCP(nil, testTargetAddr)
 	if err != nil {
 		t.Fatalf("ShadowsocksClient.DialTCP failed: %v", err)
@@ -271,8 +271,8 @@ func startShadowsocksTCPEchoProxy(expectedTgtAddr string, t testing.TB) (net.Lis
 			go func() {
 				defer running.Done()
 				defer clientConn.Close()
-				ssr := ss.NewShadowsocksReader(clientConn, cipher, nil)
-				ssw := ss.NewShadowsocksWriter(clientConn, cipher, nil)
+				ssr := ss.NewShadowsocksReader(clientConn, cipher)
+				ssw := ss.NewShadowsocksWriter(clientConn, cipher)
 				ssClientConn := onet.WrapConn(clientConn, ssr, ssw)
 
 				tgtAddr, err := socks.ReadAddr(ssClientConn)

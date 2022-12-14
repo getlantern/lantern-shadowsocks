@@ -25,7 +25,6 @@ import (
 
 	"github.com/Jigsaw-Code/outline-ss-server/client"
 	onet "github.com/Jigsaw-Code/outline-ss-server/net"
-	"github.com/Jigsaw-Code/outline-ss-server/prefix"
 	"github.com/Jigsaw-Code/outline-ss-server/service"
 	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
 	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
@@ -98,7 +97,7 @@ func startUDPEchoServer(t testing.TB) (*net.UDPConn, *sync.WaitGroup) {
 	return conn, &running
 }
 
-func TestTCPEchoNoPrefix(t *testing.T) {
+func TestTCPEcho(t *testing.T) {
 	echoListener, echoRunning := startTCPEchoServer(t)
 
 	proxyListener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
@@ -132,34 +131,31 @@ func TestTCPEchoNoPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ShadowsocksClient.DialTCP failed: %v", err)
 	}
-	// fmt.Printf("Conn: %v -> %v\n", conn.LocalAddr(), conn.RemoteAddr())
 
-	// Send a bunch of bytes to the echo server and assert that the echo
-	// server returns the same bytes.
-	for i := 0; i < 10; i++ {
-		const N = 1000
-		up := make([]byte, N)
-		for i := 0; i < N; i++ {
-			up[i] = byte(i)
-		}
-		n, err := conn.Write(up)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if n != N {
-			t.Fatalf("Tried to upload %d bytes, but only sent %d", N, n)
-		}
-		down := make([]byte, N)
-		n, err = conn.Read(down)
-		if err != nil && err != io.EOF {
-			t.Fatal(err)
-		}
-		if n != N {
-			t.Fatalf("Expected to download %d bytes, but only received %d", N, n)
-		}
-		if !bytes.Equal(up, down) {
-			t.Fatal("Echo mismatch")
-		}
+	const N = 1000
+	up := make([]byte, N)
+	for i := 0; i < N; i++ {
+		up[i] = byte(i)
+	}
+	n, err := conn.Write(up)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != N {
+		t.Fatalf("Tried to upload %d bytes, but only sent %d", N, n)
+	}
+
+	down := make([]byte, N)
+	n, err = conn.Read(down)
+	if err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+	if n != N {
+		t.Fatalf("Expected to download %d bytes, but only received %d", N, n)
+	}
+
+	if !bytes.Equal(up, down) {
+		t.Fatal("Echo mismatch")
 	}
 
 	conn.Close()
@@ -593,89 +589,5 @@ func BenchmarkUDPManyKeys(b *testing.B) {
 	b.StopTimer()
 	proxy.Stop()
 	echoConn.Close()
-	echoRunning.Wait()
-}
-
-// TestTCPEchoWithDNSOverTCPPrefix is a copy of TestTCPEchoNoPrefix, but with a
-// DNS-over-TCP prefix. This is just a random prefix that we happen to use for
-// particular cases, but any prefix would do.
-//
-// It's best not to make an effort to merge the two functions together since
-// this repo is a fork and upstream outline-ss-server doesn't have prefix
-// logic. This'll make rebasing in the future easier.
-func TestTCPEchoWithDNSOverTCPPrefix(t *testing.T) {
-	echoListener, echoRunning := startTCPEchoServer(t)
-	proxyListener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
-	if err != nil {
-		t.Fatalf("ListenTCP failed: %v", err)
-	}
-	secrets := ss.MakeTestSecrets(1)
-	cipherList, err := service.MakeTestCiphers(secrets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	replayCache := service.NewReplayCache(5)
-	const testTimeout = 200 * time.Millisecond
-	proxy := service.NewTCPService(
-		cipherList, &replayCache, &metrics.NoOpMetrics{}, testTimeout,
-		&service.TCPServiceOptions{
-			AbsorbPrefixFunc: prefix.AbsorbDNSOverTCPPrefix,
-		},
-	)
-	proxy.SetTargetIPValidator(allowAll)
-	go proxy.Serve(proxyListener)
-
-	proxyHost, proxyPort, err := net.SplitHostPort(proxyListener.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	portNum, err := strconv.Atoi(proxyPort)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client, err := client.NewClient(
-		proxyHost, portNum, secrets[0], ss.TestCipher,
-		&client.ClientOptions{MakePrefixFunc: prefix.MakeDNSOverTCPPrefix},
-	)
-	if err != nil {
-		t.Fatalf("Failed to create ShadowsocksClient: %v", err)
-	}
-	conn, err := client.DialTCP(nil, echoListener.Addr().String())
-	if err != nil {
-		t.Fatalf("ShadowsocksClient.DialTCP failed: %v", err)
-	}
-	// fmt.Printf("Conn: %v -> %v\n", conn.LocalAddr(), conn.RemoteAddr())
-
-	// Send a bunch of bytes to the echo server and assert that the echo
-	// server returns the same bytes.
-	for i := 0; i < 10; i++ {
-		const N = 1000
-		up := make([]byte, N)
-		for i := 0; i < N; i++ {
-			up[i] = byte(i)
-		}
-		n, err := conn.Write(up)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if n != N {
-			t.Fatalf("Tried to upload %d bytes, but only sent %d", N, n)
-		}
-		down := make([]byte, N)
-		n, err = conn.Read(down)
-		if err != nil && err != io.EOF {
-			t.Fatal(err)
-		}
-		if n != N {
-			t.Fatalf("Expected to download %d bytes, but only received %d", N, n)
-		}
-		if !bytes.Equal(up, down) {
-			t.Fatal("Echo mismatch")
-		}
-	}
-
-	conn.Close()
-	proxy.Stop()
-	echoListener.Close()
 	echoRunning.Wait()
 }
