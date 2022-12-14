@@ -33,13 +33,16 @@ func main() {
 		}
 	}
 
-	client, err := client.NewClient(*hostFlag, *portFlag, *secretFlag, *cipherFlag)
+	cl, err := client.NewClient(*hostFlag, *portFlag, *secretFlag, *cipherFlag)
 	if err != nil {
 		panic(err)
 	}
+	cl.SetTCPSaltGenerator(client.NewPrefixSaltGenerator(func() ([]byte, error) {
+		return prefix, nil
+	}))
 
 	// Start a TCP connection against Google
-	conn, err := client.DialTCP(
+	conn, err := cl.DialTCP(
 		nil,
 		"142.250.181.206:80", // Google
 	)

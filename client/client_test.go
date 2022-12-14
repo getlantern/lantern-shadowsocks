@@ -150,7 +150,7 @@ func TestShadowsocksClient_TCPPrefix(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	d.SetTCPSaltGenerator(NewPrefixSaltGenerator(prefix))
+	d.SetTCPSaltGenerator(NewPrefixSaltGenerator(func() ([]byte, error) { return prefix, nil }))
 	conn, err := d.DialTCP(nil, testTargetAddr)
 	if err != nil {
 		t.Fatalf("ShadowsocksClient.DialTCP failed: %v", err)

@@ -174,3 +174,24 @@ Summary:
 - Delete the Github token you created for the release on the [Personal Access Tokens page](https://github.com/settings/tokens).
 
 Full instructions in [GoReleaser's Quick Start](https://goreleaser.com/quick-start) (jump to the section starting "You’ll need to export a GITHUB_TOKEN environment variable").
+
+## FAQ
+
+### LANTERN-SPECIFIC: Adding prefixes to Shadowsocks packets
+
+Sometimes you'd need to add a specific prefix to the packets the client sends to fool a Censor. See this [particular case for example](https://github.com/getlantern/lantern-internal/issues/4428#issuecomment-1337979698).
+
+You can do that with this fork like this:
+
+* Client initialization:
+
+        // See client/client.go for more info
+        cl, err := client.NewClient(whateverHost, whateverPort, whateverPassword, whateverCipher)
+        p := prefix.FromString("dnsovertcp")
+	      cl.SetTCPSaltGenerator(NewPrefixSaltGenerator(p.Make))
+
+No service-side change is required but **make sure** the prefix is not too big since you're lowering the security of the encryption. See here: https://github.com/getlantern/lantern-shadowsocks/blob/ee3db22b920c79c4c5bc5c97892c7cd1d8a91627/client/salt.go#L46
+
+There's a specific prefix we use for some Iranian tracks in `prefix/dnsovertcp.go`.
+
+**Important Note** while it is possible to do this in UDP as well, for now, we've only written the code for TCP messages (i.e., with `service/tcp.go`)

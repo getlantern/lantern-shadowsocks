@@ -39,7 +39,7 @@ func setRandomBitsToOne(salter ss.SaltGenerator, output []byte) error {
 // Test that the prefix bytes are respected, and the remainder are random.
 func TestTypicalPrefix(t *testing.T) {
 	prefix := []byte("twelve bytes")
-	salter := NewPrefixSaltGenerator(prefix)
+	salter := NewPrefixSaltGenerator(func() ([]byte, error) { return prefix, nil })
 
 	output := make([]byte, 32)
 	if err := setRandomBitsToOne(salter, output); err != nil {

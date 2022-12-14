@@ -1,10 +1,20 @@
 package prefix
 
-import "io"
+import (
+	"strings"
+)
 
-// MakePrefixFunc returns a function that returns a prefix
-type MakePrefixFunc func() ([]byte, error)
+type Prefix interface {
+	Make() ([]byte, error)
+}
 
-// AbsorbPrefixFunc returns a function that absorbs a prefix from an io.Reader
-// and return it
-type AbsorbPrefixFunc func(io.Reader) ([]byte, error)
+func FromString(s string) Prefix {
+	switch strings.ToLower(s) {
+	case "none":
+		return NewNonePrefix()
+	case "dnsovertcp":
+		return NewDNSOverTCPPrefix()
+	default:
+		return NewNonePrefix()
+	}
+}
