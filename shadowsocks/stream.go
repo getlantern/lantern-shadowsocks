@@ -22,7 +22,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/Jigsaw-Code/outline-ss-server/prefix"
 	"github.com/Jigsaw-Code/outline-ss-server/slicepool"
 )
 
@@ -57,26 +56,12 @@ type Writer struct {
 	aead cipher.AEAD
 	// Index of the next encrypted chunk to write.
 	counter []byte
-	// A prefix to prepend to every write.
-	// See "Adding prefixes to Shadowsocks packets" in the README for more
-	// info.
-	makePrefixFunc prefix.MakePrefixFunc
 }
 
 // NewShadowsocksWriter creates a Writer that encrypts the given Writer using
 // the shadowsocks protocol with the given shadowsocks cipher.
-//
-// If prefix is non-nil, it is prepended to every write.
-func NewShadowsocksWriter(
-	writer io.Writer,
-	ssCipher *Cipher,
-	makePrefixFunc prefix.MakePrefixFunc) *Writer {
-	return &Writer{
-		writer:         writer,
-		ssCipher:       ssCipher,
-		saltGenerator:  RandomSaltGenerator,
-		makePrefixFunc: makePrefixFunc,
-	}
+func NewShadowsocksWriter(writer io.Writer, ssCipher *Cipher) *Writer {
+	return &Writer{writer: writer, ssCipher: ssCipher, saltGenerator: RandomSaltGenerator}
 }
 
 // SetSaltGenerator sets the salt generator to be used. Must be called before the first write.
@@ -262,17 +247,7 @@ func (sw *Writer) flush() error {
 	binary.BigEndian.PutUint16(sizeBuf, uint16(sw.pending))
 	sizeBlockSize := sw.encryptBlock(sizeBuf)
 	payloadSize := sw.encryptBlock(payloadBuf[:sw.pending])
-	bufToWrite := []byte{}
-	if sw.makePrefixFunc != nil {
-		p, err := sw.makePrefixFunc()
-		if err != nil {
-			return fmt.Errorf("Failed to make required prefix: %w", err)
-		}
-		bufToWrite = append(bufToWrite, p...)
-	}
-	bufToWrite = append(bufToWrite, sw.buf[start:saltSize+sizeBlockSize+payloadSize]...)
-	// fmt.Printf("bufToWrite: %x\n", bufToWrite[0:3])
-	_, err := sw.writer.Write(bufToWrite)
+	_, err := sw.writer.Write(sw.buf[start : saltSize+sizeBlockSize+payloadSize])
 	sw.pending = 0
 	return err
 }
@@ -297,10 +272,6 @@ type chunkReader struct {
 	payloadSizeBuf []byte
 	// Holds a buffer for the payload and its AEAD tag, when needed.
 	payload slicepool.LazySlice
-	// A prefix to be expected with every new packet.
-	// See "Adding prefixes to Shadowsocks packets" in the README for more
-	// info.
-	absorbPrefixFunc prefix.AbsorbPrefixFunc
 }
 
 // Reader is an io.Reader that also implements io.WriterTo to
@@ -312,20 +283,12 @@ type Reader interface {
 
 // NewShadowsocksReader creates a Reader that decrypts the given Reader using
 // the shadowsocks protocol with the given shadowsocks cipher.
-//
-// If prefix is non-nil, all packets must be prefixed with the given bytes, else
-// the reader will return an error.
-func NewShadowsocksReader(
-	reader io.Reader,
-	ssCipher *Cipher,
-	absorbPrefixFunc prefix.AbsorbPrefixFunc,
-) Reader {
+func NewShadowsocksReader(reader io.Reader, ssCipher *Cipher) Reader {
 	return &readConverter{
 		cr: &chunkReader{
-			reader:           reader,
-			ssCipher:         ssCipher,
-			payload:          readBufPool.LazySlice(),
-			absorbPrefixFunc: absorbPrefixFunc,
+			reader:   reader,
+			ssCipher: ssCipher,
+			payload:  readBufPool.LazySlice(),
 		},
 	}
 }
@@ -371,18 +334,10 @@ func (cr *chunkReader) readMessage(buf []byte) error {
 // ReadChunk returns the next chunk from the stream.  Callers must fully
 // consume and discard the previous chunk before calling ReadChunk again.
 func (cr *chunkReader) ReadChunk() ([]byte, error) {
-	// If prefix is non-nil, read the prefix from the header of every new
-	// packet.
-	if cr.absorbPrefixFunc != nil {
-		_, err := cr.absorbPrefixFunc(cr.reader)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to absorb required prefix: %w", err)
-		}
-	}
-
 	if err := cr.init(); err != nil {
 		return nil, err
 	}
+
 	// Release the previous payload buffer.
 	cr.payload.Release()
 

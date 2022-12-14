@@ -33,13 +33,7 @@ func main() {
 		}
 	}
 
-	client, err := client.NewClient(*hostFlag, *portFlag, *secretFlag, *cipherFlag,
-		&client.ClientOptions{
-			MakePrefixFunc: func() ([]byte, error) {
-				return prefix, nil
-			},
-		},
-	)
+	client, err := client.NewClient(*hostFlag, *portFlag, *secretFlag, *cipherFlag)
 	if err != nil {
 		panic(err)
 	}

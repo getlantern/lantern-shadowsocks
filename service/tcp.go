@@ -27,7 +27,6 @@ import (
 	"time"
 
 	onet "github.com/Jigsaw-Code/outline-ss-server/net"
-	"github.com/Jigsaw-Code/outline-ss-server/prefix"
 	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
 	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
 	logging "github.com/op/go-logging"
@@ -123,18 +122,11 @@ type tcpService struct {
 	replayCache       *ReplayCache
 	targetIPValidator onet.TargetIPValidator
 	dialTarget        TargetDialer
-	// A prefix expected to be present in the first bytes of every TCP packet
-	// from the client. See "Adding prefixes to Shadowsocks packets" in the
-	// README for more info.
-	absorbPrefixFunc prefix.AbsorbPrefixFunc
 }
 
 type TCPServiceOptions struct {
 	DialTarget        TargetDialer
 	TargetIPValidator onet.TargetIPValidator
-	// A prefix expected to be present in the first bytes of every TCP packet
-	// from the client.
-	AbsorbPrefixFunc prefix.AbsorbPrefixFunc
 }
 
 // NewTCPService creates a default TCPService
@@ -148,7 +140,6 @@ func NewTCPService(
 	// Init the default options and override with any provided.
 	var dialTarget TargetDialer = DefaultDialTarget
 	var targetIPValidator onet.TargetIPValidator = onet.RequirePublicIP
-	var absorbPrefixFunc prefix.AbsorbPrefixFunc = nil
 	if opts != nil {
 		if len(opts) > 1 {
 			logger.Errorf(
@@ -160,11 +151,7 @@ func NewTCPService(
 		if opts[0].TargetIPValidator != nil {
 			targetIPValidator = opts[0].TargetIPValidator
 		}
-		if opts[0].AbsorbPrefixFunc != nil {
-			absorbPrefixFunc = opts[0].AbsorbPrefixFunc
-		}
 	}
-
 	return &tcpService{
 		ciphers:           ciphers,
 		m:                 m,
@@ -172,7 +159,6 @@ func NewTCPService(
 		replayCache:       replayCache,
 		targetIPValidator: targetIPValidator,
 		dialTarget:        dialTarget,
-		absorbPrefixFunc:  absorbPrefixFunc,
 	}
 }
 
@@ -269,19 +255,7 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 	clientTCPConn.SetReadDeadline(connStart.Add(s.readTimeout))
 	var proxyMetrics metrics.ProxyMetrics
 	clientConn := metrics.MeasureConn(clientTCPConn, &proxyMetrics.ProxyClient, &proxyMetrics.ClientProxy)
-
-	var absorbedPrefix []byte = nil
-	if s.absorbPrefixFunc != nil {
-		absorbedPrefix, err = s.absorbPrefixFunc(clientConn)
-		if err != nil {
-			logger.Errorf("Failed to absorb prefix: %v", err)
-		}
-	}
-	cipherEntry, clientReader, clientSalt, timeToCipher, keyErr := findAccessKey(
-		clientConn, remoteIP(clientTCPConn), s.ciphers)
-	if absorbedPrefix != nil {
-		clientReader = io.MultiReader(bytes.NewReader(absorbedPrefix), clientReader)
-	}
+	cipherEntry, clientReader, clientSalt, timeToCipher, keyErr := findAccessKey(clientConn, remoteIP(clientTCPConn), s.ciphers)
 
 	connError := func() *onet.ConnectionError {
 		if keyErr != nil {
@@ -305,7 +279,7 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 			return onet.NewConnectionError(status, "Replay detected", nil)
 		}
 
-		ssr := ss.NewShadowsocksReader(clientReader, cipherEntry.Cipher, s.absorbPrefixFunc)
+		ssr := ss.NewShadowsocksReader(clientReader, cipherEntry.Cipher)
 		tgtAddr, err := socks.ReadAddr(ssr)
 		// Clear the deadline for the target address
 		clientTCPConn.SetReadDeadline(time.Time{})
@@ -323,7 +297,7 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 		defer tgtConn.Close()
 
 		// logger.Debugf("proxy %s <-> %s", clientTCPConn.RemoteAddr().String(), tgtConn.RemoteAddr().String())
-		ssw := ss.NewShadowsocksWriter(clientConn, cipherEntry.Cipher, nil)
+		ssw := ss.NewShadowsocksWriter(clientConn, cipherEntry.Cipher)
 		ssw.SetSaltGenerator(cipherEntry.SaltGenerator)
 
 		fromClientErrCh := make(chan error, 1)
