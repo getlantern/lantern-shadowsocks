@@ -1,6 +1,9 @@
-module github.com/Jigsaw-Code/outline-ss-server
+module github.com/getlantern/lantern-shadowsocks
+
+go 1.18
 
 require (
+	github.com/Jigsaw-Code/outline-ss-server v1.4.0
 	github.com/goreleaser/goreleaser v1.13.1
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
 	github.com/oschwald/geoip2-golang v1.8.0
@@ -175,5 +178,3 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-go 1.18
