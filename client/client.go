@@ -24,7 +24,7 @@ type Client interface {
 	// DialTCP connects to `raddr` over TCP though a Shadowsocks proxy.
 	// `laddr` is a local bind address, a local address is automatically chosen if nil.
 	// `raddr` has the form `host:port`, where `host` can be a domain name or IP address.
-	DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, error)
+	DialTCP(laddr *net.TCPAddr, raddr string, opts ...*DialTCPOptions) (onet.DuplexConn, error)
 
 	// ListenUDP relays UDP packets though a Shadowsocks proxy.
 	// `laddr` is a local bind address, a local address is automatically chosen if nil.
@@ -36,26 +36,9 @@ type Client interface {
 	SetTCPSaltGenerator(ss.SaltGenerator)
 }
 
-type ClientOptions struct {
-	// A prefix to prepend to every write.
-	Prefix []byte
-}
-
 // NewClient creates a client that routes connections to a Shadowsocks proxy listening at
 // `host:port`, with authentication parameters `cipher` (AEAD) and `password`.
-// TODO: add a dialer argument to support proxy chaining and transport changes.
-func NewClient(host string, port int, password, cipherName string, opts ...*ClientOptions) (Client, error) {
-	var prefix []byte = nil
-	if opts != nil {
-		if len(opts) > 1 {
-			fmt.Printf(
-				"ERROR at NewClient: at most one ClientOptions argument is allowed")
-		}
-		if opts[0] != nil && opts[0].Prefix != nil {
-			prefix = opts[0].Prefix
-		}
-	}
-
+func NewClient(host string, port int, password, cipherName string) (Client, error) {
 	// TODO: consider using net.LookupIP to get a list of IPs, and add logic for optimal selection.
 	proxyIP, err := net.ResolveIPAddr("ip", host)
 	if err != nil {
@@ -65,7 +48,7 @@ func NewClient(host string, port int, password, cipherName string, opts ...*Clie
 	if err != nil {
 		return nil, err
 	}
-	d := ssClient{proxyIP: proxyIP.IP, proxyPort: port, cipher: cipher, prefix: prefix}
+	d := ssClient{proxyIP: proxyIP.IP, proxyPort: port, cipher: cipher}
 	return &d, nil
 }
 
@@ -73,10 +56,7 @@ type ssClient struct {
 	proxyIP   net.IP
 	proxyPort int
 	cipher    *ss.Cipher
-	// A prefix to prepend to every write. See "Adding prefixes to Shadowsocks
-	// packets" in the README for more info.
-	prefix []byte
-	salter ss.SaltGenerator
+	salter    ss.SaltGenerator
 }
 
 func (c *ssClient) SetTCPSaltGenerator(salter ss.SaltGenerator) {
@@ -95,7 +75,22 @@ func (c *ssClient) SetTCPSaltGenerator(salter ss.SaltGenerator) {
 // was ~1 ms.)  If no client payload is received by this time, we connect without it.
 const helloWait = 10 * time.Millisecond
 
-func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, error) {
+type DialTCPOptions struct {
+	// A prefix to prepend to every write.
+	PrefixBuf []byte
+}
+
+func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string, opts ...*DialTCPOptions) (onet.DuplexConn, error) {
+	var prefixBuf []byte = nil
+	if opts != nil {
+		if len(opts) > 1 {
+			return nil, fmt.Errorf("at most one DialTCPOption argument is allowed")
+		}
+		if opts[0] != nil && opts[0].PrefixBuf != nil {
+			prefixBuf = opts[0].PrefixBuf
+		}
+	}
+
 	socksTargetAddr := socks.ParseAddr(raddr)
 	if socksTargetAddr == nil {
 		return nil, errors.New("Failed to parse target address")
@@ -105,7 +100,8 @@ func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, e
 	if err != nil {
 		return nil, err
 	}
-	ssw := ss.NewShadowsocksWriter(proxyConn, c.cipher, c.prefix)
+	// fmt.Printf("Shadowsocks: Connected to proxy %s\n", proxyConn.RemoteAddr())
+	ssw := ss.NewShadowsocksWriter(proxyConn, c.cipher, prefixBuf)
 	if c.salter != nil {
 		ssw.SetSaltGenerator(c.salter)
 	}
@@ -117,7 +113,7 @@ func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, e
 	time.AfterFunc(helloWait, func() {
 		ssw.Flush()
 	})
-	ssr := ss.NewShadowsocksReader(proxyConn, c.cipher, nil)
+	ssr := ss.NewShadowsocksReader(proxyConn, c.cipher)
 	return onet.WrapConn(proxyConn, ssr, ssw), nil
 }
 

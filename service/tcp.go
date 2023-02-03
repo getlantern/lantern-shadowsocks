@@ -126,7 +126,7 @@ type tcpService struct {
 	// A prefix expected to be present in the first bytes of every TCP packet
 	// from the client. See "Adding prefixes to Shadowsocks packets" in the
 	// README for more info.
-	prefix []byte
+	prefixSize int
 }
 
 type TCPServiceOptions struct {
@@ -134,7 +134,7 @@ type TCPServiceOptions struct {
 	TargetIPValidator onet.TargetIPValidator
 	// A prefix expected to be present in the first bytes of every TCP packet
 	// from the client.
-	Prefix []byte
+	PrefixSize int
 }
 
 // NewTCPService creates a default TCPService
@@ -148,7 +148,7 @@ func NewTCPService(
 	// Init the default options and override with any provided.
 	var dialTarget TargetDialer = DefaultDialTarget
 	var targetIPValidator onet.TargetIPValidator = onet.RequirePublicIP
-	var prefix []byte = nil
+	var prefixSize int
 	if opts != nil {
 		if len(opts) > 1 {
 			logger.Errorf(
@@ -160,9 +160,7 @@ func NewTCPService(
 		if opts[0].TargetIPValidator != nil {
 			targetIPValidator = opts[0].TargetIPValidator
 		}
-		if opts[0].Prefix != nil {
-			prefix = opts[0].Prefix
-		}
+		prefixSize = opts[0].PrefixSize
 	}
 
 	return &tcpService{
@@ -172,7 +170,7 @@ func NewTCPService(
 		replayCache:       replayCache,
 		targetIPValidator: targetIPValidator,
 		dialTarget:        dialTarget,
-		prefix:            prefix,
+		prefixSize:        prefixSize,
 	}
 }
 
@@ -270,16 +268,19 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 	var proxyMetrics metrics.ProxyMetrics
 	clientConn := metrics.MeasureConn(clientTCPConn, &proxyMetrics.ProxyClient, &proxyMetrics.ClientProxy)
 
-	if s.prefix != nil {
-		if err := prefix.AbsorbPrefixFromReader(clientConn, s.prefix); err != nil {
-			logger.Errorf("Failed to absorb prefix (%x): %v", s.prefix, err)
+	if s.prefixSize != 0 {
+		absorbedPrefixBuf, err := prefix.AbsorbPrefixFromReader(clientConn, s.prefixSize)
+		if err != nil {
+			logger.Errorf("Failed to absorb prefix of size %d: %v", s.prefixSize, err)
 		}
+		logger.Debugf("Absorbed prefix of size %d (%v)\n", s.prefixSize, absorbedPrefixBuf)
 	}
 	cipherEntry, clientReader, clientSalt, timeToCipher, keyErr := findAccessKey(
 		clientConn, remoteIP(clientTCPConn), s.ciphers)
-	if s.prefix != nil {
-		clientReader = io.MultiReader(bytes.NewReader(s.prefix), clientReader)
-	}
+	// TODO <01-02-2023, soltzen> Don't put back the prefix since we just need to read it on first dial
+	// if s.prefix != nil {
+	// 	clientReader = io.MultiReader(bytes.NewReader(s.prefix), clientReader)
+	// }
 
 	connError := func() *onet.ConnectionError {
 		if keyErr != nil {
@@ -303,7 +304,7 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 			return onet.NewConnectionError(status, "Replay detected", nil)
 		}
 
-		ssr := ss.NewShadowsocksReader(clientReader, cipherEntry.Cipher, s.prefix)
+		ssr := ss.NewShadowsocksReader(clientReader, cipherEntry.Cipher)
 		tgtAddr, err := socks.ReadAddr(ssr)
 		// Clear the deadline for the target address
 		clientTCPConn.SetReadDeadline(time.Time{})

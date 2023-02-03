@@ -40,7 +40,7 @@ func TestCompatibility(t *testing.T) {
 		ssWriter := NewShadowsocksWriter(left, cipher, nil)
 		ssWriter.Write([]byte(toRight))
 
-		ssReader := NewShadowsocksReader(left, cipher, nil)
+		ssReader := NewShadowsocksReader(left, cipher)
 		output := make([]byte, len(fromRight))
 		_, err = ssReader.Read(output)
 		require.Nil(t, err, "Read failed: %v", err)

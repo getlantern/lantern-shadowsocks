@@ -25,7 +25,6 @@ import (
 
 	"github.com/Jigsaw-Code/outline-ss-server/client"
 	onet "github.com/Jigsaw-Code/outline-ss-server/net"
-	"github.com/Jigsaw-Code/outline-ss-server/prefix"
 	"github.com/Jigsaw-Code/outline-ss-server/service"
 	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
 	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
@@ -58,7 +57,7 @@ func startTCPEchoServer(t testing.TB) (*net.TCPListener, *sync.WaitGroup) {
 		for {
 			clientConn, err := listener.AcceptTCP()
 			if err != nil {
-				t.Logf("AcceptTCP failed: %v", err)
+				// t.Logf("AcceptTCP failed: %v", err)
 				return
 			}
 			running.Add(1)
@@ -604,10 +603,11 @@ func BenchmarkUDPManyKeys(b *testing.B) {
 // this repo is a fork and upstream outline-ss-server doesn't have prefix
 // logic. This'll make rebasing in the future easier.
 func TestTCPEchoWithDNSOverTCPPrefix(t *testing.T) {
-	prefix, err := prefix.MakeDNSOverTCPPrefix(1500)
-	if err != nil {
-		t.Fatal(err)
-	}
+	prefixBuf := []byte("AAAAAA")
+	// prefix, err := prefix.NewDNSOverTCPPrefix().Make()
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
 	echoListener, echoRunning := startTCPEchoServer(t)
 	proxyListener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
@@ -623,7 +623,7 @@ func TestTCPEchoWithDNSOverTCPPrefix(t *testing.T) {
 	const testTimeout = 200 * time.Millisecond
 	proxy := service.NewTCPService(
 		cipherList, &replayCache, &metrics.NoOpMetrics{}, testTimeout,
-		&service.TCPServiceOptions{Prefix: prefix},
+		&service.TCPServiceOptions{PrefixSize: len(prefixBuf)},
 	)
 	proxy.SetTargetIPValidator(allowAll)
 	go proxy.Serve(proxyListener)
@@ -636,14 +636,16 @@ func TestTCPEchoWithDNSOverTCPPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, err := client.NewClient(
+	cl, err := client.NewClient(
 		proxyHost, portNum, secrets[0], ss.TestCipher,
-		&client.ClientOptions{Prefix: prefix},
 	)
 	if err != nil {
 		t.Fatalf("Failed to create ShadowsocksClient: %v", err)
 	}
-	conn, err := client.DialTCP(nil, echoListener.Addr().String())
+	conn, err := cl.DialTCP(
+		nil, echoListener.Addr().String(),
+		&client.DialTCPOptions{PrefixBuf: prefixBuf},
+	)
 	if err != nil {
 		t.Fatalf("ShadowsocksClient.DialTCP failed: %v", err)
 	}

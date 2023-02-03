@@ -22,7 +22,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/Jigsaw-Code/outline-ss-server/prefix"
 	"github.com/Jigsaw-Code/outline-ss-server/slicepool"
 )
 
@@ -60,22 +59,22 @@ type Writer struct {
 	// A prefix to prepend to every write.
 	// See "Adding prefixes to Shadowsocks packets" in the README for more
 	// info.
-	prefix []byte
+	prefixBuf       []byte
+	prefixWriteOnce sync.Once
 }
 
 // NewShadowsocksWriter creates a Writer that encrypts the given Writer using
 // the shadowsocks protocol with the given shadowsocks cipher.
-//
-// If prefix is non-nil, it is prepended to every write.
 func NewShadowsocksWriter(
 	writer io.Writer,
 	ssCipher *Cipher,
-	prefix []byte) *Writer {
+	prefixBuf []byte,
+) *Writer {
 	return &Writer{
 		writer:        writer,
 		ssCipher:      ssCipher,
 		saltGenerator: RandomSaltGenerator,
-		prefix:        prefix,
+		prefixBuf:     prefixBuf,
 	}
 }
 
@@ -263,8 +262,10 @@ func (sw *Writer) flush() error {
 	sizeBlockSize := sw.encryptBlock(sizeBuf)
 	payloadSize := sw.encryptBlock(payloadBuf[:sw.pending])
 	bufToWrite := []byte{}
-	if sw.prefix != nil {
-		bufToWrite = append(bufToWrite, sw.prefix...)
+	if sw.prefixBuf != nil {
+		sw.prefixWriteOnce.Do(func() {
+			bufToWrite = append(bufToWrite, sw.prefixBuf...)
+		})
 	}
 	bufToWrite = append(bufToWrite, sw.buf[start:saltSize+sizeBlockSize+payloadSize]...)
 	// fmt.Printf("bufToWrite: %x\n", bufToWrite[0:3])
@@ -293,10 +294,6 @@ type chunkReader struct {
 	payloadSizeBuf []byte
 	// Holds a buffer for the payload and its AEAD tag, when needed.
 	payload slicepool.LazySlice
-	// A prefix to be expected with every new packet.
-	// See "Adding prefixes to Shadowsocks packets" in the README for more
-	// info.
-	prefix []byte
 }
 
 // Reader is an io.Reader that also implements io.WriterTo to
@@ -309,15 +306,16 @@ type Reader interface {
 // NewShadowsocksReader creates a Reader that decrypts the given Reader using
 // the shadowsocks protocol with the given shadowsocks cipher.
 //
-// If prefix is non-nil, all packets must be prefixed with the given bytes, else
+// If prefixSize is non-nil, all packets must be prefixed with the given bytes, else
 // the reader will return an error.
-func NewShadowsocksReader(reader io.Reader, ssCipher *Cipher, prefix []byte) Reader {
+// TODO <01-02-2023, soltzen> prefixSize is not so important since we're
+// reading it now just on the first packet. Remove this comment once we merge PRs
+func NewShadowsocksReader(reader io.Reader, ssCipher *Cipher) Reader {
 	return &readConverter{
 		cr: &chunkReader{
 			reader:   reader,
 			ssCipher: ssCipher,
 			payload:  readBufPool.LazySlice(),
-			prefix:   prefix,
 		},
 	}
 }
@@ -365,12 +363,12 @@ func (cr *chunkReader) readMessage(buf []byte) error {
 func (cr *chunkReader) ReadChunk() ([]byte, error) {
 	// If prefix is non-nil, read the prefix from the header of every new
 	// packet.
-	if cr.prefix != nil {
-		if err := prefix.AbsorbPrefixFromReader(cr.reader, cr.prefix); err != nil {
-			return nil, fmt.Errorf("while absorbing prefix (%v) after init: %w",
-				cr.prefix, err)
-		}
-	}
+	// if cr.prefix != nil {
+	// 	if err := prefix.AbsorbPrefixFromReader(cr.reader, cr.prefix); err != nil {
+	// 		return nil, fmt.Errorf("while absorbing prefix (%v) after init: %w",
+	// 			cr.prefix, err)
+	// 	}
+	// }
 
 	if err := cr.init(); err != nil {
 		return nil, err

@@ -186,9 +186,9 @@ You can do that with this fork like this:
 * Client initialization:
 
         // See client/client.go for more info
-        cl, err := client.NewClient(whateverHost, whateverPort, whateverPassword, whateverCipher)
-        p := prefix.FromString("dnsovertcp")
-	      cl.SetTCPSaltGenerator(NewPrefixSaltGenerator(p.Make))
+        cl, _ := client.NewClient(whateverHost, whateverPort,
+          whateverPassword, whateverCipher,
+          &client.ClientOptions{Prefix: prefix.FromString("dnsovertcp")})
 
 No service-side change is required but **make sure** the prefix is not too big since you're lowering the security of the encryption. See here: https://github.com/getlantern/lantern-shadowsocks/blob/ee3db22b920c79c4c5bc5c97892c7cd1d8a91627/client/salt.go#L46
 
