@@ -108,11 +108,11 @@ func findEntry(firstBytes []byte, ciphers []*list.Element) (*CipherEntry, *list.
 	return nil, nil
 }
 
-type TargetDialer func(tgtAddr string, clientAddr net.Addr, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.DuplexConn, *onet.ConnectionError)
+type TargetDialer func(tgtAddr string, clientTCPConn onet.TCPConn, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.TCPConn, *onet.ConnectionError)
 
 type tcpService struct {
 	mu          sync.RWMutex // Protects .listeners and .stopped
-	listener    *net.TCPListener
+	listener    onet.TCPListener
 	stopped     bool
 	ciphers     CipherList
 	m           metrics.ShadowsocksMetrics
@@ -167,7 +167,7 @@ type TCPService interface {
 	// SetTargetIPValidator sets the function to be used to validate the target IP addresses.
 	SetTargetIPValidator(targetIPValidator onet.TargetIPValidator)
 	// Serve adopts the listener, which will be closed before Serve returns.  Serve returns an error unless Stop() was called.
-	Serve(listener *net.TCPListener) error
+	Serve(listener onet.TCPListener) error
 	// Stop closes the listener but does not interfere with existing connections.
 	Stop() error
 	// GracefulStop calls Stop(), and then blocks until all resources have been cleaned up.
@@ -178,7 +178,7 @@ func (s *tcpService) SetTargetIPValidator(targetIPValidator onet.TargetIPValidat
 	s.targetIPValidator = targetIPValidator
 }
 
-func DefaultDialTarget(tgtAddr string, clientAddr net.Addr, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.DuplexConn, *onet.ConnectionError) {
+func DefaultDialTarget(tgtAddr string, clientConn onet.TCPConn, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.TCPConn, *onet.ConnectionError) {
 	var ipError *onet.ConnectionError
 	dialer := net.Dialer{Control: func(network, address string, c syscall.RawConn) error {
 		ip, _, _ := net.SplitHostPort(address)
@@ -199,7 +199,7 @@ func DefaultDialTarget(tgtAddr string, clientAddr net.Addr, proxyMetrics *metric
 	return metrics.MeasureConn(tgtTCPConn, &proxyMetrics.ProxyTarget, &proxyMetrics.TargetProxy), nil
 }
 
-func (s *tcpService) Serve(listener *net.TCPListener) error {
+func (s *tcpService) Serve(listener onet.TCPListener) error {
 	s.mu.Lock()
 	if s.listener != nil {
 		s.mu.Unlock()
@@ -241,7 +241,7 @@ func (s *tcpService) Serve(listener *net.TCPListener) error {
 	}
 }
 
-func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPConn) {
+func (s *tcpService) handleConnection(listenerPort int, clientTCPConn onet.TCPConn) {
 	clientLocation, err := s.m.GetLocation(clientTCPConn.RemoteAddr())
 	if err != nil {
 		logger.Warningf("Failed location lookup: %v", err)
@@ -289,7 +289,7 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 			return onet.NewConnectionError("ERR_READ_ADDRESS", "Failed to get target address", err)
 		}
 
-		tgtConn, dialErr := s.dialTarget(tgtAddr.String(), clientTCPConn.RemoteAddr(), &proxyMetrics, s.targetIPValidator)
+		tgtConn, dialErr := s.dialTarget(tgtAddr.String(), clientTCPConn, &proxyMetrics, s.targetIPValidator)
 		if dialErr != nil {
 			// We don't drain so dial errors and invalid addresses are communicated quickly.
 			return dialErr

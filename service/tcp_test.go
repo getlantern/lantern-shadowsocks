@@ -129,7 +129,7 @@ func TestCompatibleCiphers(t *testing.T) {
 // Fake DuplexConn
 // 1-way pipe, representing the upstream flow as seen by the server.
 type conn struct {
-	onet.DuplexConn
+	onet.TCPConn
 	clientAddr net.Addr
 	reader     io.ReadCloser
 	writer     io.WriteCloser
@@ -283,7 +283,7 @@ func TestProbeRandom(t *testing.T) {
 	require.Nil(t, err, "MakeTestCiphers failed: %v", err)
 	testMetrics := &probeTestMetrics{}
 	s := NewTCPService(cipherList, nil, testMetrics, 200*time.Millisecond)
-	go s.Serve(listener)
+	go s.Serve(onet.AdaptListener(listener))
 
 	// 221 is the largest random probe reported by https://gfw.report/blog/gfw_shadowsocks/
 	buf := make([]byte, 221)
@@ -351,7 +351,7 @@ func TestProbeClientBytesBasicTruncated(t *testing.T) {
 	testMetrics := &probeTestMetrics{}
 	s := NewTCPService(cipherList, nil, testMetrics, 200*time.Millisecond)
 	s.SetTargetIPValidator(allowAll)
-	go s.Serve(listener)
+	go s.Serve(onet.AdaptListener(listener))
 
 	discardListener, discardWait := startDiscardServer(t)
 	initialBytes := makeClientBytesBasic(t, cipher, discardListener.Addr().String())
@@ -381,7 +381,7 @@ func TestProbeClientBytesBasicModified(t *testing.T) {
 	testMetrics := &probeTestMetrics{}
 	s := NewTCPService(cipherList, nil, testMetrics, 200*time.Millisecond)
 	s.SetTargetIPValidator(allowAll)
-	go s.Serve(listener)
+	go s.Serve(onet.AdaptListener(listener))
 
 	discardListener, discardWait := startDiscardServer(t)
 	initialBytes := makeClientBytesBasic(t, cipher, discardListener.Addr().String())
@@ -412,7 +412,7 @@ func TestProbeClientBytesCoalescedModified(t *testing.T) {
 	testMetrics := &probeTestMetrics{}
 	s := NewTCPService(cipherList, nil, testMetrics, 200*time.Millisecond)
 	s.SetTargetIPValidator(allowAll)
-	go s.Serve(listener)
+	go s.Serve(onet.AdaptListener(listener))
 
 	discardListener, discardWait := startDiscardServer(t)
 	initialBytes := makeClientBytesCoalesced(t, cipher, discardListener.Addr().String())
@@ -449,7 +449,7 @@ func TestProbeServerBytesModified(t *testing.T) {
 	cipher := firstCipher(cipherList)
 	testMetrics := &probeTestMetrics{}
 	s := NewTCPService(cipherList, nil, testMetrics, 200*time.Millisecond)
-	go s.Serve(listener)
+	go s.Serve(onet.AdaptListener(listener))
 
 	initialBytes := makeServerBytes(t, cipher)
 	bytesToSend := make([]byte, len(initialBytes))
@@ -496,7 +496,7 @@ func TestReplayDefense(t *testing.T) {
 		return conn
 	}
 
-	go s.Serve(listener)
+	go s.Serve(onet.AdaptListener(listener))
 
 	// First run.
 	conn1 := run()
@@ -560,7 +560,7 @@ func TestReverseReplayDefense(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go s.Serve(listener)
+	go s.Serve(onet.AdaptListener(listener))
 
 	conn, err := net.Dial(listener.Addr().Network(), listener.Addr().String())
 	if err != nil {
@@ -638,7 +638,7 @@ func probeExpectTimeout(t *testing.T, payloadSize int) {
 		}
 	}()
 
-	go s.Serve(listener)
+	go s.Serve(onet.AdaptListener(listener))
 	<-done
 	s.GracefulStop()
 
@@ -680,7 +680,7 @@ func TestTCPDoubleServe(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		listener := makeLocalhostListener(t)
 		go func() {
-			err := s.Serve(listener)
+			err := s.Serve(onet.AdaptListener(listener))
 			if err != nil {
 				c <- err
 				close(c)
@@ -710,7 +710,7 @@ func TestTCPEarlyStop(t *testing.T) {
 		t.Error(err)
 	}
 	listener := makeLocalhostListener(t)
-	if err := s.Serve(listener); err != nil {
+	if err := s.Serve(onet.AdaptListener(listener)); err != nil {
 		t.Error(err)
 	}
 }

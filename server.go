@@ -28,6 +28,7 @@ import (
 	"syscall"
 	"time"
 
+	onet "github.com/Jigsaw-Code/outline-ss-server/net"
 	"github.com/Jigsaw-Code/outline-ss-server/service"
 	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
 	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
@@ -89,7 +90,7 @@ func (s *SSServer) startPort(portNum int) error {
 	port.tcpService = service.NewTCPService(port.cipherList, &s.replayCache, s.m, tcpReadTimeout)
 	port.udpService = service.NewUDPService(s.natTimeout, port.cipherList, s.m)
 	s.ports[portNum] = port
-	go port.tcpService.Serve(listener)
+	go port.tcpService.Serve(onet.AdaptListener(listener))
 	go port.udpService.Serve(packetConn)
 	return nil
 }

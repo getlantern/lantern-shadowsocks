@@ -190,7 +190,7 @@ You can do that with this fork like this:
         p := prefix.FromString("dnsovertcp")
 	      cl.SetTCPSaltGenerator(NewPrefixSaltGenerator(p.Make))
 
-No service-side change is required but **make sure** the prefix is not too big since you're lowering the security of the encryption. See here: https://github.com/getlantern/lantern-shadowsocks/blob/ee3db22b920c79c4c5bc5c97892c7cd1d8a91627/client/salt.go#L46
+No service-side change is required but **make sure** the prefix is not too big since you're lowering the security of the encryption. See here: https://github.com/getlantern-lantern-shadowsocks/blob/ee3db22b920c79c4c5bc5c97892c7cd1d8a91627/client/salt.go#L46
 
 There's a specific prefix we use for some Iranian tracks in `prefix/dnsovertcp.go`.
 
