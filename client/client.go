@@ -23,7 +23,7 @@ type Client interface {
 	// DialTCP connects to `raddr` over TCP though a Shadowsocks proxy.
 	// `laddr` is a local bind address, a local address is automatically chosen if nil.
 	// `raddr` has the form `host:port`, where `host` can be a domain name or IP address.
-	DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, error)
+	DialTCP(laddr *net.TCPAddr, raddr string) (onet.TCPConn, error)
 
 	// ListenUDP relays UDP packets though a Shadowsocks proxy.
 	// `laddr` is a local bind address, a local address is automatically chosen if nil.
@@ -75,7 +75,7 @@ func (c *ssClient) SetTCPSaltGenerator(salter ss.SaltGenerator) {
 // was ~1 ms.)  If no client payload is received by this time, we connect without it.
 const helloWait = 10 * time.Millisecond
 
-func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, error) {
+func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.TCPConn, error) {
 	socksTargetAddr := socks.ParseAddr(raddr)
 	if socksTargetAddr == nil {
 		return nil, errors.New("Failed to parse target address")

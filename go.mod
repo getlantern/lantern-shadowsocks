@@ -1,4 +1,4 @@
-module github.com/getlantern/lantern-shadowsocks
+module github.com/Jigsaw-Code/outline-ss-server
 
 go 1.18
 
