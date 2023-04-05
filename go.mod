@@ -14,6 +14,8 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
+replace github.com/Jigsaw-Code/outline-internal-sdk => ../outline-internal-sdk
+
 require (
 	cloud.google.com/go v0.103.0 // indirect
 	cloud.google.com/go/compute v1.7.0 // indirect

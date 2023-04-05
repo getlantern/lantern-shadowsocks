@@ -127,7 +127,7 @@ func TestTCPEcho(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create ShadowsocksClient: %v", err)
 	}
-	conn, err := client.DialTCP(nil, echoListener.Addr().String())
+	conn, err := client.DialTCP(nil, echoListener.Addr().String(), nil)
 	if err != nil {
 		t.Fatalf("ShadowsocksClient.DialTCP failed: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestRestrictedAddresses(t *testing.T) {
 	}
 
 	for _, address := range addresses {
-		conn, err := client.DialTCP(nil, address)
+		conn, err := client.DialTCP(nil, address, nil)
 		require.NoError(t, err, "Failed to dial %v", address)
 		n, err := conn.Read(buf)
 		assert.Equal(t, 0, n, "Server should close without replying on rejected address")
@@ -379,7 +379,7 @@ func BenchmarkTCPThroughput(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create ShadowsocksClient: %v", err)
 	}
-	conn, err := client.DialTCP(nil, echoListener.Addr().String())
+	conn, err := client.DialTCP(nil, echoListener.Addr().String(), nil)
 	if err != nil {
 		b.Fatalf("ShadowsocksClient.DialTCP failed: %v", err)
 	}
@@ -463,7 +463,7 @@ func BenchmarkTCPMultiplexing(b *testing.B) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < k; i++ {
-				conn, err := client.DialTCP(nil, echoListener.Addr().String())
+				conn, err := client.DialTCP(nil, echoListener.Addr().String(), nil)
 				if err != nil {
 					b.Errorf("ShadowsocksClient.DialTCP failed: %v", err)
 				}

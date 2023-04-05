@@ -35,7 +35,7 @@ type Client interface {
 	// `raddr` has the form `host:port`, where `host` can be a domain name or IP address.
 	//
 	// Deprecated: use StreamDialer.Dial instead.
-	DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, error)
+	DialTCP(laddr *net.TCPAddr, raddr string, dialer transport.Dialer) (onet.DuplexConn, error)
 
 	// ListenUDP relays UDP packets though a Shadowsocks proxy.
 	// `laddr` is a local bind address, a local address is automatically chosen if nil.
@@ -86,7 +86,7 @@ func (c *ssClient) ListenUDP(laddr *net.UDPAddr) (net.PacketConn, error) {
 	// Make sure to make a copy so we don't modify the original endpoint.
 	endpointCopy := c.udpEndpoint
 	if laddr != nil {
-		endpointCopy.Dialer.LocalAddr = laddr
+		endpointCopy.Dialer.SetLocalAddr(laddr)
 	}
 	packetListener, err := ssclient.NewShadowsocksPacketListener(endpointCopy, c.cipher)
 	if err != nil {
@@ -100,11 +100,15 @@ func (c *ssClient) SetTCPSaltGenerator(salter shadowsocks.SaltGenerator) {
 }
 
 // DialTCP implements the Client.DialTCP API.
-func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, error) {
+func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string, dialer transport.Dialer) (onet.DuplexConn, error) {
 	// Make sure to make a copy so we don't modify the original endpoint.
+	if dialer == nil {
+		dialer = transport.NewDefaultDialer()
+	}
 	endpointCopy := c.tcpEndpoint
+	endpointCopy.Dialer = dialer
 	if laddr != nil {
-		endpointCopy.Dialer.LocalAddr = laddr
+		endpointCopy.Dialer.SetLocalAddr(laddr)
 	}
 	streamDialer, err := ssclient.NewShadowsocksStreamDialer(endpointCopy, c.cipher)
 	if err != nil {

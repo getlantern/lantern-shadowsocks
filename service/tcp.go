@@ -108,7 +108,7 @@ func findEntry(firstBytes []byte, ciphers []*list.Element) (*CipherEntry, *list.
 	return nil, nil
 }
 
-type TargetDialer func(tgtAddr string, clientTCPConn onet.DuplexConn, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.DuplexConn, *onet.ConnectionError)
+type TargetDialer func(tgtAddr string, clientConn onet.DuplexConn, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.DuplexConn, *onet.ConnectionError)
 
 type tcpService struct {
 	mu          sync.RWMutex // Protects .listeners and .stopped
@@ -289,7 +289,7 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 			return onet.NewConnectionError("ERR_READ_ADDRESS", "Failed to get target address", err)
 		}
 
-		tgtConn, dialErr := s.dialTarget(tgtAddr.String(), clientTCPConn, &proxyMetrics, s.targetIPValidator)
+		tgtConn, dialErr := s.dialTarget(tgtAddr.String(), clientConn, &proxyMetrics, s.targetIPValidator)
 		if dialErr != nil {
 			// We don't drain so dial errors and invalid addresses are communicated quickly.
 			return dialErr
