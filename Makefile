@@ -1,24 +1,20 @@
 BUILDDIR=$(CURDIR)/dist
-GOBIN=$(CURDIR)/bin
-GORELEASER=$(GOBIN)/goreleaser
+GORELEASER=go run github.com/goreleaser/goreleaser
 
 .PHONY: release release-local test clean clean-all
 
 # This requires GITHUB_TOKEN to be set.
-release: clean-all $(GORELEASER)
+release: clean-all
 	$(GORELEASER)
 
-release-local: $(GORELEASER)
+release-local:
 	$(GORELEASER) --rm-dist --snapshot
 
 test: third_party/maxmind/test-data/GeoIP2-Country-Test.mmdb
 	go test -v -race -bench=. ./... -benchtime=100ms
 
 third_party/maxmind/test-data/GeoIP2-Country-Test.mmdb:
-	git submodule update --init
-
-$(GORELEASER): go.mod
-	env GOBIN=$(GOBIN) go install github.com/goreleaser/goreleaser
+	git submodule update --init --depth=1
 
 go.mod: tools.go
 	go mod tidy
@@ -30,4 +26,3 @@ clean:
 
 clean-all: clean
 	rm -rf $(CURDIR)/third_party/maxmind/*
-	rm -rf $(GOBIN)
