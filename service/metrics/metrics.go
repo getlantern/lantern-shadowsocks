@@ -295,7 +295,7 @@ func (m *ProxyMetrics) add(other ProxyMetrics) {
 }
 
 type measuredConn struct {
-	onet.TCPConn
+	onet.DuplexConn
 	io.WriterTo
 	readCount *int64
 	io.ReaderFrom
@@ -303,31 +303,31 @@ type measuredConn struct {
 }
 
 func (c *measuredConn) Read(b []byte) (int, error) {
-	n, err := c.TCPConn.Read(b)
+	n, err := c.DuplexConn.Read(b)
 	*c.readCount += int64(n)
 	return n, err
 }
 
 func (c *measuredConn) WriteTo(w io.Writer) (int64, error) {
-	n, err := io.Copy(w, c.TCPConn)
+	n, err := io.Copy(w, c.DuplexConn)
 	*c.readCount += n
 	return n, err
 }
 
 func (c *measuredConn) Write(b []byte) (int, error) {
-	n, err := c.TCPConn.Write(b)
+	n, err := c.DuplexConn.Write(b)
 	*c.writeCount += int64(n)
 	return n, err
 }
 
 func (c *measuredConn) ReadFrom(r io.Reader) (int64, error) {
-	n, err := io.Copy(c.TCPConn, r)
+	n, err := io.Copy(c.DuplexConn, r)
 	*c.writeCount += n
 	return n, err
 }
 
-func MeasureConn(conn onet.TCPConn, bytesSent, bytesReceived *int64) onet.TCPConn {
-	return &measuredConn{TCPConn: conn, writeCount: bytesSent, readCount: bytesReceived}
+func MeasureConn(conn onet.DuplexConn, bytesSent, bytesReceived *int64) onet.DuplexConn {
+	return &measuredConn{DuplexConn: conn, writeCount: bytesSent, readCount: bytesReceived}
 }
 
 // NoOpMetrics is a fake ShadowsocksMetrics that doesn't do anything. Useful in tests

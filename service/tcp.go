@@ -108,11 +108,11 @@ func findEntry(firstBytes []byte, ciphers []*list.Element) (*CipherEntry, *list.
 	return nil, nil
 }
 
-type TargetDialer func(tgtAddr string, clientTCPConn onet.TCPConn, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.TCPConn, *onet.ConnectionError)
+type TargetDialer func(tgtAddr string, clientTCPConn onet.DuplexConn, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.DuplexConn, *onet.ConnectionError)
 
 type tcpService struct {
 	mu          sync.RWMutex // Protects .listeners and .stopped
-	listener    onet.TCPListener
+	listener    *net.TCPListener
 	stopped     bool
 	ciphers     CipherList
 	m           metrics.ShadowsocksMetrics
@@ -167,7 +167,7 @@ type TCPService interface {
 	// SetTargetIPValidator sets the function to be used to validate the target IP addresses.
 	SetTargetIPValidator(targetIPValidator onet.TargetIPValidator)
 	// Serve adopts the listener, which will be closed before Serve returns.  Serve returns an error unless Stop() was called.
-	Serve(listener onet.TCPListener) error
+	Serve(listener *net.TCPListener) error
 	// Stop closes the listener but does not interfere with existing connections.
 	Stop() error
 	// GracefulStop calls Stop(), and then blocks until all resources have been cleaned up.
@@ -178,7 +178,7 @@ func (s *tcpService) SetTargetIPValidator(targetIPValidator onet.TargetIPValidat
 	s.targetIPValidator = targetIPValidator
 }
 
-func DefaultDialTarget(tgtAddr string, clientConn onet.TCPConn, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.TCPConn, *onet.ConnectionError) {
+func DefaultDialTarget(tgtAddr string, clientConn onet.DuplexConn, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.DuplexConn, *onet.ConnectionError) {
 	var ipError *onet.ConnectionError
 	dialer := net.Dialer{Control: func(network, address string, c syscall.RawConn) error {
 		ip, _, _ := net.SplitHostPort(address)
@@ -199,7 +199,7 @@ func DefaultDialTarget(tgtAddr string, clientConn onet.TCPConn, proxyMetrics *me
 	return metrics.MeasureConn(tgtTCPConn, &proxyMetrics.ProxyTarget, &proxyMetrics.TargetProxy), nil
 }
 
-func (s *tcpService) Serve(listener onet.TCPListener) error {
+func (s *tcpService) Serve(listener *net.TCPListener) error {
 	s.mu.Lock()
 	if s.listener != nil {
 		s.mu.Unlock()
@@ -241,7 +241,7 @@ func (s *tcpService) Serve(listener onet.TCPListener) error {
 	}
 }
 
-func (s *tcpService) handleConnection(listenerPort int, clientTCPConn onet.TCPConn) {
+func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPConn) {
 	clientLocation, err := s.m.GetLocation(clientTCPConn.RemoteAddr())
 	if err != nil {
 		logger.Warningf("Failed location lookup: %v", err)
@@ -301,7 +301,6 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn onet.TCPCo
 		ssw.SetSaltGenerator(cipherEntry.SaltGenerator)
 
 		fromClientErrCh := make(chan error, 1)
-		fromTargetErrCh := make(chan error, 1)
 		go func() {
 			_, fromClientErr := ssr.WriteTo(tgtConn)
 			if fromClientErr != nil {
@@ -315,27 +314,19 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn onet.TCPCo
 			tgtConn.CloseWrite()
 			fromClientErrCh <- fromClientErr
 		}()
+		_, fromTargetErr := ssw.ReadFrom(tgtConn)
+		// Send FIN to client.
+		clientConn.CloseWrite()
+		tgtConn.CloseRead()
 
-		go func() {
-			_, fromTargetErr := ssw.ReadFrom(tgtConn)
-			// Send FIN to client.
-			clientConn.CloseWrite()
-			tgtConn.CloseRead()
-			fromTargetErrCh <- fromTargetErr
-		}()
-
-		select {
-		case fromClientErr := <-fromClientErrCh:
-			if fromClientErr == nil {
-				return nil
-			}
+		fromClientErr := <-fromClientErrCh
+		if fromClientErr != nil {
 			return onet.NewConnectionError("ERR_RELAY_CLIENT", "Failed to relay traffic from client", fromClientErr)
-		case fromTargetErr := <-fromClientErrCh:
-			if fromTargetErr == nil {
-				return nil
-			}
+		}
+		if fromTargetErr != nil {
 			return onet.NewConnectionError("ERR_RELAY_TARGET", "Failed to relay traffic from target", fromTargetErr)
 		}
+		return nil
 	}()
 
 	connDuration := time.Now().Sub(connStart)
